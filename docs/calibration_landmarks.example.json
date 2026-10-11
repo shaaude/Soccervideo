@@ -1,0 +1,92 @@
+{
+  "_comment": "Illustrative only: pixel positions come from a made-up camera. Replace every image_xy with pixels clicked on a frame from YOUR camera and field_xy with surveyed metres. Keep at least one point holdout:true so error is measured.",
+  "camera_id": "cam01",
+  "field_length_m": 73.0,
+  "field_width_m": 46.0,
+  "segments": [
+    {
+      "start_frame": 0,
+      "end_frame": 22499,
+      "points": [
+        {
+          "name": "corner_near_left",
+          "image_xy": [
+            260.0,
+            760.0
+          ],
+          "field_xy": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "corner_far_left",
+          "image_xy": [
+            430.3,
+            266.4
+          ],
+          "field_xy": [
+            0.0,
+            46.0
+          ]
+        },
+        {
+          "name": "corner_near_right",
+          "image_xy": [
+            1468.8,
+            786.6
+          ],
+          "field_xy": [
+            73.0,
+            0.0
+          ]
+        },
+        {
+          "name": "corner_far_right",
+          "image_xy": [
+            1362.7,
+            295.1
+          ],
+          "field_xy": [
+            73.0,
+            46.0
+          ]
+        },
+        {
+          "name": "halfway_near",
+          "image_xy": [
+            871.0,
+            773.4
+          ],
+          "field_xy": [
+            36.5,
+            0.0
+          ]
+        },
+        {
+          "name": "halfway_far",
+          "image_xy": [
+            900.4,
+            280.9
+          ],
+          "field_xy": [
+            36.5,
+            46.0
+          ]
+        },
+        {
+          "name": "centre_spot",
+          "image_xy": [
+            887.6,
+            495.4
+          ],
+          "field_xy": [
+            36.5,
+            23.0
+          ],
+          "holdout": true
+        }
+      ]
+    }
+  ]
+}

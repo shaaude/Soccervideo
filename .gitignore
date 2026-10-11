@@ -1,0 +1,15 @@
+# Private footage, generated data, weights, secrets: never commit
+data/
+models/
+*.pt
+*.onnx
+*.engine
+.env
+third_party/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+reports/*
+!reports/.gitkeep

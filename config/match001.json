@@ -1,0 +1,23 @@
+{
+  "match_id": "match001",
+  "video_id": "match001-cam01",
+  "season": "Fall 2026",
+  "competition": "NCSL",
+  "age_group": "GU12",
+  "division": "Division 1",
+  "play_format": null,
+  "home_team_id": null,
+  "away_team_id": null,
+  "match_date": null,
+  "field_length_m": null,
+  "field_width_m": null,
+  "camera_id": "cam01",
+  "camera_type": "fixed_wide_angle",
+  "original_video": "data/raw/match001-original.mp4",
+  "normalized_video": "data/normalized/match001.mp4",
+  "normalized_fps": 25,
+  "match_clock_offset_seconds": null,
+  "video_use_permission": "pending",
+  "calibration_landmarks": null,
+  "roster": null
+}

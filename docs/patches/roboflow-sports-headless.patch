@@ -1,0 +1,46 @@
+diff --git a/examples/soccer/main.py b/examples/soccer/main.py
+index 26591d3..91b5162 100644
+--- a/examples/soccer/main.py
++++ b/examples/soccer/main.py
+@@ -386,7 +386,8 @@ def run_radar(source_video_path: str, device: str) -> Iterator[np.ndarray]:
+         yield annotated_frame
+ 
+ 
+-def main(source_video_path: str, target_video_path: str, device: str, mode: Mode) -> None:
++def main(source_video_path: str, target_video_path: str, device: str, mode: Mode,
++         preview: bool = False) -> None:
+     if mode == Mode.PITCH_DETECTION:
+         frame_generator = run_pitch_detection(
+             source_video_path=source_video_path, device=device)
+@@ -413,10 +414,12 @@ def main(source_video_path: str, target_video_path: str, device: str, mode: Mode
+         for frame in frame_generator:
+             sink.write_frame(frame)
+ 
+-            cv2.imshow("frame", frame)
+-            if cv2.waitKey(1) & 0xFF == ord("q"):
+-                break
+-        cv2.destroyAllWindows()
++            if preview:
++                cv2.imshow("frame", frame)
++                if cv2.waitKey(1) & 0xFF == ord("q"):
++                    break
++        if preview:
++            cv2.destroyAllWindows()
+ 
+ 
+ if __name__ == '__main__':
+@@ -425,10 +428,13 @@ if __name__ == '__main__':
+     parser.add_argument('--target_video_path', type=str, required=True)
+     parser.add_argument('--device', type=str, default='cpu')
+     parser.add_argument('--mode', type=Mode, default=Mode.PLAYER_DETECTION)
++    parser.add_argument('--preview', action='store_true',
++                        help='Show an interactive cv2 window (requires a display).')
+     args = parser.parse_args()
+     main(
+         source_video_path=args.source_video_path,
+         target_video_path=args.target_video_path,
+         device=args.device,
+-        mode=args.mode
++        mode=args.mode,
++        preview=args.preview
+     )

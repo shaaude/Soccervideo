@@ -1,0 +1,11 @@
+# Roboflow Sports soccer example checkpoints (Step 3). Verified against
+# third_party/roboflow-sports/examples/soccer/main.py at the pinned commit:
+#   BALL_CLASS_ID=0, GOALKEEPER_CLASS_ID=1, PLAYER_CLASS_ID=2, REFEREE_CLASS_ID=3
+# expected_names are checked against model.names at load time; a mismatch aborts export.
+name: roboflow_football
+person_model:
+  expected_names: {0: ball, 1: goalkeeper, 2: player, 3: referee}
+  map: {1: goalkeeper, 2: player, 3: referee}
+ball_model:
+  expected_names: {0: ball}
+  map: {0: ball}

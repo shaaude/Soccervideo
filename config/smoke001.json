@@ -1,0 +1,23 @@
+{
+  "match_id": "smoke001",
+  "video_id": "smoke001-broadcast",
+  "season": "n/a",
+  "competition": "smoke-test (public broadcast clip, not youth footage)",
+  "age_group": "adult",
+  "division": "n/a",
+  "play_format": "11v11",
+  "home_team_id": null,
+  "away_team_id": null,
+  "match_date": null,
+  "field_length_m": null,
+  "field_width_m": null,
+  "camera_id": "broadcast",
+  "camera_type": "moving_broadcast",
+  "original_video": "data/raw/smoke001-original.mp4",
+  "normalized_video": "data/normalized/smoke001.mp4",
+  "normalized_fps": 25,
+  "match_clock_offset_seconds": null,
+  "video_use_permission": "pending",
+  "calibration_landmarks": null,
+  "roster": null
+}
