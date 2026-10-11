@@ -8,6 +8,5 @@ recordings:
     granted_by: team Veo account owner
     basis: Recording from the user's own team's Veo account
     recorded_at: "2026-10-11"
-    feeds:
+    feeds:   # panorama only: it is the analysis feed (static camera, every player in frame)
       panorama: https://c.veocdn.com/67766a5f-59d6-4021-ae4c-2e1f8058aa3f/panorama/transcode-520becdc-1ef6-4642-b320-19e68d5b620b.mp4
-      standard: https://c.veocdn.com/67766a5f-59d6-4021-ae4c-2e1f8058aa3f/standard/machine/68ffd7d8/video.mp4
