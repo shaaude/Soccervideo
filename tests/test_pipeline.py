@@ -85,7 +85,9 @@ def test_pipeline_end_to_end_resume_and_review_gate(repo):
 
     # A human confirms one event -> only aggregation reruns and produces verified-only profiles.
     store = ReviewStore(r / "data/annotations/t1", "t1")
-    store.save_review("t1-transfer-000001", {"event_type": "pass", "outcome": "completed", "review_status": "verified",
+    eid = ev.event_id[0]
+    assert eid.startswith(f"t1-{st['run_id'][:8]}-transfer-")
+    store.save_review(eid, {"event_type": "pass", "outcome": "completed", "review_status": "verified",
                                              "actor_player_id": "p7"}, "rev", 0)
     st3 = process(r, "t1", "data/normalized/t1.mp4", r / "config/pipeline.yaml")
     assert statuses(st3)["aggregate"] == "SUCCEEDED" and calls["n"] == n

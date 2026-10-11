@@ -175,7 +175,10 @@ def generate_with_audit(tracks: pd.DataFrame, balls: pd.DataFrame, match_id: str
                                "gap_seconds": round(gap, 3), "reason": reason})
             continue
         events.append({
-            "event_id": f"{match_id}-transfer-{len(events) + 1:06d}",
+            # Track IDs are run-scoped, so candidate IDs from a pipeline run carry the run prefix:
+            # a re-run can never silently re-attach an old review to a different event.
+            "event_id": (f"{match_id}-{run_id[:8]}-transfer-{len(events) + 1:06d}" if run_id
+                         else f"{match_id}-transfer-{len(events) + 1:06d}"),
             "match_id": match_id,
             "event_type": "ball_transfer_candidate",
             "video_time_s": round(prev["end_frame"] / p.fps, 3),

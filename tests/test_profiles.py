@@ -87,6 +87,13 @@ def test_numeric_player_ids_stay_strings_when_read_from_csv():
     assert prof.player_id.tolist() == ["12"]
 
 
+def test_reviews_from_superseded_run_are_not_double_counted():
+    e = events().assign(orphaned="")
+    e.loc[1, "orphaned"] = "true"
+    prof, rep = build_profiles(e)
+    assert prof.iloc[0].pass_attempts_resolved == 1 and rep["excluded_confirmed_from_superseded_runs"] == 1
+
+
 def test_per90_only_with_exposure():
     exp = pd.DataFrame([{"match_id": "m1", "player_id": "p1", "reviewed_minutes": 45.0},
                         {"match_id": "m2", "player_id": "p1", "reviewed_minutes": 45.0}])

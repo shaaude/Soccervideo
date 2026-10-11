@@ -36,6 +36,9 @@ Supersedes guide Appendix B, whose PR 1–5 are now implemented (see `IMPLEMENTA
 * Replace the in-process job thread with Redis + RQ (or Celery) and a separate GPU worker; keep job states.
 * Replace API keys with OIDC; add guardian↔player links before enabling the guardian role.
 * Object storage with signed URLs; retention/deletion jobs; monitoring of stage latency, GPU time, reviewer minutes.
+* Cross-run de-duplication in the database: the file-based profile build excludes confirmed reviews whose
+  candidate belongs to a superseded run (`orphaned`), but the API profile query does not yet. Add a
+  `superseded_by_run` marker on `events` (migration) and exclude those rows, or serve the newest run's queue only.
 
 ## PR F — Temporal event model (Steps 11, 26) — only after the five-match pilot has labels
 * Reproduce sn-spotting first. Split by whole matches (70/15/15 + unseen camera/team holdouts).

@@ -7,6 +7,8 @@
   rows and reported as unattributed.
 * Team-level types (actor_required: false, e.g. ball_out, goal markers) never enter player rows.
 * Player goals come from shots with outcome 'goal' (taxonomy local-v1), so nothing is double counted.
+* Confirmed reviews flagged `orphaned` (their candidate belongs to a superseded processing run) are
+  excluded and reported, so an event reviewed under two runs is never double counted.
 * Rates per 90 are produced only when reviewed exposure minutes are supplied; otherwise None.
 """
 from __future__ import annotations
@@ -54,6 +56,12 @@ def build_profiles(events: pd.DataFrame, taxonomy: Taxonomy | None = None,
         ev[c] = ev[c].where(~_blank(ev[c]), "").astype(str).str.strip()
 
     confirmed = ev[ev["review_status"].isin(tax.confirmed_statuses)].copy()
+    # Reviews of candidates that the current processing run no longer proposes (another run's track IDs)
+    # are excluded, so the same real event reviewed under two runs is never counted twice.
+    orphaned = confirmed["orphaned"].astype(str).str.lower().eq("true") if "orphaned" in confirmed else \
+        pd.Series(False, index=confirmed.index)
+    n_orphaned = int(orphaned.sum())
+    confirmed = confirmed[~orphaned]
     problems = []
     for r in confirmed.itertuples(index=False):
         errs = tax.validate_review(r.event_type, r.outcome, r.review_status)
@@ -121,7 +129,8 @@ def build_profiles(events: pd.DataFrame, taxonomy: Taxonomy | None = None,
     report = {
         "taxonomy_version": tax.version,
         "events_in_file": len(ev),
-        "excluded_not_confirmed": int(len(ev) - len(confirmed)),
+        "excluded_not_confirmed": int(len(ev) - len(confirmed) - n_orphaned),
+        "excluded_confirmed_from_superseded_runs": n_orphaned,
         "status_counts": ev["review_status"].replace("", "blank").value_counts().to_dict(),
         "confirmed": len(confirmed),
         "attributed_to_players": len(attributed),
