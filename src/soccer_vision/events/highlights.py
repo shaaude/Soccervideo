@@ -24,7 +24,8 @@ def safe_name(event_id: str) -> str:
     return name
 
 
-def plan_clips(events: pd.DataFrame, duration: float, before: float, after: float) -> list[dict]:
+def plan_clips(events: pd.DataFrame, duration: float, before: float, after: float,
+               time_offset: float = 0.0, skip_outside: bool = False, skipped: list | None = None) -> list[dict]:
     if before < 0 or after <= 0:
         raise ValueError("Clip padding must be nonnegative before, positive after")
     if not {"event_id", "video_time_s"}.issubset(events.columns):
@@ -35,11 +36,14 @@ def plan_clips(events: pd.DataFrame, duration: float, before: float, after: floa
     plan = []
     for row in events.itertuples(index=False):
         try:
-            ts = float(row.video_time_s)
+            ts = float(row.video_time_s) + time_offset
         except (TypeError, ValueError):
             bad.append(f"{row.event_id}: non-numeric time")
             continue
         if not 0 <= ts <= duration:
+            if skip_outside and skipped is not None:
+                skipped.append(str(row.event_id))
+                continue
             bad.append(f"{row.event_id}: {ts}s outside 0-{duration:.3f}s")
             continue
         start, end = max(0.0, ts - before), min(duration, ts + after)
@@ -53,10 +57,15 @@ def plan_clips(events: pd.DataFrame, duration: float, before: float, after: floa
     return plan
 
 
-def make_highlights(video: Path, events: pd.DataFrame, out_dir: Path, before=4.0, after=6.0) -> pd.DataFrame:
+def make_highlights(video: Path, events: pd.DataFrame, out_dir: Path, before=4.0, after=6.0,
+                    time_offset: float = 0.0, skip_outside: bool = False) -> pd.DataFrame:
+    """Cut review clips. `time_offset` maps event times into another feed of the same match
+    (e.g. Veo follow-cam = panorama time + offset); with `skip_outside`, events the other feed does not
+    cover are listed in `skipped_events.txt` instead of failing the stage."""
     video, out_dir = Path(video), Path(out_dir)
     duration = video_summary(video)["duration_seconds"]
-    plan = plan_clips(events, duration, before, after)
+    skipped: list[str] = []
+    plan = plan_clips(events, duration, before, after, time_offset, skip_outside, skipped)
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for c in plan:
@@ -77,4 +86,6 @@ def make_highlights(video: Path, events: pd.DataFrame, out_dir: Path, before=4.0
                      "clip_duration_s": round(got, 3)})
     index = pd.DataFrame(rows, columns=CLIP_INDEX_COLUMNS)
     index.to_csv(out_dir / "clip_index.csv", index=False)
+    if skip_outside:
+        (out_dir / "skipped_events.txt").write_text("\n".join(skipped) + ("\n" if skipped else ""))
     return index

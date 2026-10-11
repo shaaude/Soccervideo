@@ -28,6 +28,7 @@ p.add_argument("--video", default=None)
 p.add_argument("--candidates", default=None)
 p.add_argument("--annotations-dir", default=None)
 p.add_argument("--clips", default=None, help="clip_index.csv from create_highlights")
+p.add_argument("--review-clips", default=None, help="follow-cam clip_index.csv (Veo highlights_review/)")
 args, _ = p.parse_known_args(sys.argv[1:])
 mid = args.match_id
 video = Path(args.video or f"data/normalized/{mid}-test.mp4")
@@ -51,6 +52,9 @@ if candidates.exists():
         st.warning(f"{sync['orphaned']} reviewed events no longer appear in the latest candidates (kept, flagged orphaned).")
 rows = store.load()
 clips = pd.read_csv(clips_path, dtype={"event_id": str}) if clips_path.exists() else pd.DataFrame(columns=["event_id"])
+rclips_path = Path(args.review_clips) if args.review_clips else None
+rclips = (pd.read_csv(rclips_path, dtype={"event_id": str}) if rclips_path and rclips_path.exists()
+          else pd.DataFrame(columns=["event_id"]))
 
 with st.sidebar:
     st.subheader("Queue")
@@ -90,7 +94,16 @@ r = rows[rows["event_id"] == event_id].iloc[0]
 left, right = st.columns([3, 2])
 with left:
     clip = clips[clips["event_id"] == event_id]
-    if len(clip) and Path(clip.iloc[0]["clip_path"]).exists():
+    rclip = rclips[rclips["event_id"] == event_id]
+    if len(rclip) and Path(rclip.iloc[0]["clip_path"]).exists():
+        t_follow, t_pano = st.tabs(["Follow-cam", "Panorama (analysis view)"])
+        with t_follow:
+            st.video(str(rclip.iloc[0]["clip_path"]))
+        with t_pano:
+            if len(clip) and Path(clip.iloc[0]["clip_path"]).exists():
+                st.video(str(clip.iloc[0]["clip_path"]))
+        st.caption(f"Event at {float(r['video_time_s']):.2f} s on the panorama timeline. Track IDs refer to the panorama.")
+    elif len(clip) and Path(clip.iloc[0]["clip_path"]).exists():
         st.video(str(clip.iloc[0]["clip_path"]))
         st.caption(f"Review clip {clip.iloc[0]['start_seconds']}–{clip.iloc[0]['end_seconds']} s of source; "
                    f"event at {float(r['video_time_s']):.2f} s")

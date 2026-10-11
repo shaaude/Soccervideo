@@ -242,10 +242,13 @@ class TeamRatingSnapshot(Base):
 
 class Job(Base):
     __tablename__ = "jobs"
-    __table_args__ = (CheckConstraint(_in("state", JOB_STATES), name="ck_job_state"),)
+    __table_args__ = (CheckConstraint(_in("state", JOB_STATES), name="ck_job_state"),
+                      CheckConstraint(_in("kind", ("process", "ingest")), name="ck_job_kind"))
     job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     match_id: Mapped[str] = mapped_column(ForeignKey("matches.match_id"), index=True)
-    video_id: Mapped[str] = mapped_column(ForeignKey("match_videos.video_id"))
+    kind: Mapped[str] = mapped_column(String(12), default="process", server_default="process")
+    video_id: Mapped[str | None] = mapped_column(ForeignKey("match_videos.video_id"))  # set once ingest registers it
+    source_url: Mapped[str | None] = mapped_column(Text)  # redacted (no query string)
     state: Mapped[str] = mapped_column(String(16), default="queued")
     run_id: Mapped[str | None] = mapped_column(String(64))
     error: Mapped[str | None] = mapped_column(Text)

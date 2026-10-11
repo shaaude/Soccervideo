@@ -11,6 +11,7 @@ this increment.
 | 2 | Environment | Built | `pyproject.toml`, extras per stage; `locks/working-environment.txt`. GPU wheel choice is yours. |
 | 3 | Roboflow reference | Built (pinning, headless patch); **needs you** to download weights | `scripts/bootstrap_reference.sh`, `locks/roboflow-sports-commit.txt`, `docs/patches/`. Google Drive was blocked in the build environment, so the 5 demo videos were not rendered here. |
 | 3.3 | Normalize own video | Built | `soccer-vision normalize` (original preserved, provenance JSON, CFR check). |
+| 3.3+ | Video from a link (Veo) | Built | `soccer-vision veo` / `ingest`, `POST /matches/{id}/videos/from-url`: allowlisted https hosts, private-address and redirect checks, resumable download, token redaction, dual-feed manifest, follow-cam review clips after a verified offset, tiled detection and polynomial calibration for the stitched panorama. Not tested against Veo's servers (blocked from the build environment); tested against a local server with the same URL layout. See `docs/VEO.md`. |
 | 4 | Repository structure | Built | As guide; `tracking` lives in `detection/export.py` (ByteTrack). |
 | 5 | Manifest + provenance | Built | `config/match001.json` template; `validate-manifest --production` refuses unresolved nulls / non-granted permission. |
 | 6 | Detection export | Built | Detector-agnostic class maps validated against `model.names`; schema validation; ranked ball alternatives; annotated MP4; empty-schema output. |

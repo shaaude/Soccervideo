@@ -35,7 +35,7 @@ src/soccer_vision/
   evaluation/  per-class event, detection, identity and tracking metrics
   pipeline/    orchestrated, resumable runner with run hashes and manifests (Step 24)
   db/ api/     SQLAlchemy models, run importer, FastAPI service (Step 16)
-tests/                         52 tests (unit, pipeline, API on SQLite + PostgreSQL, migrations, Streamlit app)
+tests/                         63 tests (unit, pipeline, API on SQLite + PostgreSQL, migrations, Streamlit app)
 ```
 
 ## Set up
@@ -48,12 +48,22 @@ pip install -e ".[vision,db,api,review,eval,dev]"
 sudo apt install -y ffmpeg
 bash scripts/bootstrap_reference.sh      # Roboflow Sports at the pinned commit + demo weights (Google Drive)
 export SOCCER_DEVICE=cuda                # or cpu / mps
-python -m pytest                         # 52 tests; PostgreSQL tests need SOCCER_TEST_DATABASE_URL
+python -m pytest                         # 63 tests; PostgreSQL tests need SOCCER_TEST_DATABASE_URL
 ```
 
 Licensing: the Roboflow example models depend on Ultralytics (AGPL-3.0). Review before distributing.
 
-## Process a match
+## Analyse a Veo recording from its links
+
+```bash
+soccer-vision veo --match-id <match> --permission granted --process \
+  --panorama "https://c.veocdn.com/<recording>/panorama/transcode-<id>.mp4" \
+  --standard "https://c.veocdn.com/<recording>/standard/machine/<id>/video.mp4"
+```
+The panorama is analysed and the follow-cam is used for review clips. See [`docs/VEO.md`](docs/VEO.md)
+for the offset check, panorama calibration, and GPU needs.
+
+## Process a match from a local file
 
 ```bash
 # 1. Preserve the original and normalize to constant FPS

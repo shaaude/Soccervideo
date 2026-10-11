@@ -81,6 +81,13 @@ class VideoIn(BaseModel):
     video_use_permission: str = Field(pattern="^(pending|granted|denied)$")
 
 
+class VideoFromUrlIn(BaseModel):
+    url: str = Field(max_length=2048)
+    feed: str | None = Field(default=None, pattern="^(panorama|standard)$")
+    video_use_permission: str = Field(pattern="^(pending|granted|denied)$")
+    clip_seconds: float | None = Field(default=None, gt=0)
+
+
 class ProcessIn(BaseModel):
     video_id: str
     config: str = "config/pipeline.yaml"
@@ -119,6 +126,7 @@ def create_app(engine=None, repo: Path | None = None, executor: Callable | None 
     media_secret = os.environ.get("SOCCER_MEDIA_SECRET", "")
     tax = load_taxonomy()
     app = FastAPI(title="Soccer Vision API", version="0.1.0")
+    app.state.allow_private_urls = False  # tests only; never enable in deployment
     keys = _keys()
 
     def db():
@@ -208,6 +216,50 @@ def create_app(engine=None, repo: Path | None = None, executor: Callable | None 
 
     run_executor = executor or (lambda fn, *a: threading.Thread(target=fn, args=a, daemon=True).start())
 
+    def _run_ingest(job_id: str, match_id: str, body: dict):
+        from ..ingest import CAMERA_TYPE, ingest_url
+        try:
+            res = ingest_url(repo, match_id, body["url"], body["feed"], body["video_use_permission"],
+                             clip_seconds=body.get("clip_seconds"), allow_private=app.state.allow_private_urls)
+            rec, feed = res["record"], res["feed"]
+            vid = f"{match_id}-{feed}"
+            info = rec["normalized"]
+            with SessionLocal() as s2, s2.begin():
+                if s2.get(MatchVideo, vid) is None:
+                    s2.add(MatchVideo(video_id=vid, match_id=match_id, file_path=info["path"], sha256=info["sha256"],
+                                      camera_id=f"veo-{feed}" if rec["source"]["provider"] == "veo" else feed,
+                                      camera_type=CAMERA_TYPE.get(feed, feed),
+                                      fps=info["fps"], duration_seconds=info["duration_seconds"],
+                                      video_use_permission=body["video_use_permission"]))
+                j = s2.get(Job, job_id)
+                j.state, j.video_id = "completed", vid
+                j.stages = {"ingest": "SUCCEEDED"}
+        except Exception as e:
+            with SessionLocal() as s2, s2.begin():
+                j = s2.get(Job, job_id)
+                j.state, j.error = "failed", f"{type(e).__name__}: {e}"
+
+    @app.post("/api/v1/matches/{match_id}/videos/from-url", status_code=202)
+    def video_from_url(match_id: str, body: VideoFromUrlIn, s: Session = Depends(db), p=Depends(require("admin"))):
+        from ..ingest import IngestError, validate_url
+        if not s.get(Match, match_id):
+            raise HTTPException(404, "match not found")
+        if body.video_use_permission == "denied":
+            raise HTTPException(422, "video use permission denied: not downloading")
+        try:
+            src = validate_url(body.url, allow_private=app.state.allow_private_urls)
+        except IngestError as e:
+            raise HTTPException(422, str(e))
+        feed = body.feed or src.feed_hint
+        if feed is None:
+            raise HTTPException(422, "say which feed this is: panorama or standard")
+        job = Job(job_id=uuid.uuid4().hex, match_id=match_id, kind="ingest", state="ingesting",
+                  source_url=src.redacted_url, requested_by=p.user, stages={"ingest": "RUNNING"})
+        s.add(job)
+        s.commit()
+        run_executor(_run_ingest, job.job_id, match_id, {**body.model_dump(), "feed": feed})
+        return {"job_id": job.job_id, "state": "ingesting", "feed": feed, "source": src.redacted_url}
+
     @app.post("/api/v1/matches/{match_id}/process", status_code=202)
     def queue_process(match_id: str, body: ProcessIn, s: Session = Depends(db), p=Depends(require("admin"))):
         v = s.get(MatchVideo, body.video_id)
@@ -215,7 +267,7 @@ def create_app(engine=None, repo: Path | None = None, executor: Callable | None 
             raise HTTPException(404, "video not registered for this match")
         if v.video_use_permission != "granted":
             raise HTTPException(422, "video_use_permission must be 'granted' before processing")
-        active = s.scalar(select(Job).where(Job.video_id == v.video_id,
+        active = s.scalar(select(Job).where(Job.video_id == v.video_id, Job.kind == "process",
                                             Job.state.notin_(["completed", "failed"])))
         if active:
             return {"job_id": active.job_id, "state": active.state, "deduplicated": True}
@@ -236,7 +288,8 @@ def create_app(engine=None, repo: Path | None = None, executor: Callable | None 
             stages = [{"stage": r.stage, "status": r.status, "elapsed_seconds": r.elapsed_seconds,
                        "records": r.records, "failure_reason": r.failure_reason, "outputs": r.outputs}
                       for r in s.scalars(select(StageRun).where(StageRun.run_id == j.run_id))]
-        return {"job_id": j.job_id, "state": j.state, "run_id": j.run_id, "error": j.error,
+        return {"job_id": j.job_id, "kind": j.kind, "state": j.state, "video_id": j.video_id,
+                "source_url": j.source_url, "run_id": j.run_id, "error": j.error,
                 "stage_status": j.stages, "provenance": stages}
 
     # ------------------------------------------------------------ events

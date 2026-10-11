@@ -54,6 +54,10 @@ def cmd_export(a):
     cm = ClassMapConfig.load(a.class_map)
     person = UltralyticsPredictor(Path(a.player_weights), device, a.imgsz, min(a.person_conf, a.ball_conf_keep))
     ball = UltralyticsPredictor(Path(a.ball_weights), device, a.imgsz, a.ball_conf_keep) if a.ball_weights else None
+    if a.tile_size:
+        from .detection.tiling import TiledPredictor
+        person = TiledPredictor(person, a.tile_size, a.tile_overlap)
+        ball = TiledPredictor(ball, a.tile_size, a.tile_overlap) if ball else None
     video_id = a.video_id or f"{a.match_id}-{Path(a.video).stem}"
     cfg = ExportConfig(a.match_id, video_id, a.run_id or "adhoc", float(fps), a.person_conf, a.ball_conf_keep, a.max_frames)
     meta = export_detections(Path(a.video), Path(a.out_dir), cfg, person, cm, ball,
@@ -173,6 +177,58 @@ def cmd_db_import(a):
         print(json.dumps(import_reviews(eng, _repo() / "data" / "annotations" / mid, mid), indent=2))
 
 
+def cmd_ingest(a):
+    from .ingest import IngestError, ingest_url
+    try:
+        res = ingest_url(_repo(), a.match_id, a.url, a.feed, a.permission, a.fps, a.max_width,
+                         clip_seconds=a.clip_seconds,
+                         progress=lambda d, t: print(f"\r{d / 1e6:,.0f} MB" + (f" of {t / 1e6:,.0f} MB" if t else ""),
+                                                     end="", flush=True))
+    except IngestError as e:
+        print(f"\nERROR: {e}", file=sys.stderr)
+        return 2
+    n = res["record"]["normalized"]
+    print(f"\n{res['feed']}: {n['path']} {n['width']}x{n['height']} {n['fps']:.0f} fps "
+          f"{n['duration_seconds'] / 60:.1f} min; manifest config/{a.match_id}.json")
+
+
+def cmd_veo(a):
+    from .ingest import IngestError
+    from .veo import run_veo
+    try:
+        res = run_veo(_repo(), a.match_id, a.panorama, a.standard, a.permission,
+                      Path(a.config) if a.config else None, a.process, a.clip_seconds)
+    except IngestError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    m = res["manifest"]
+    print(f"\nManifest: config/{a.match_id}.json  (analysis feed: {m['analysis_feed']}, review feed: {m['review_feed']})")
+    if m.get("feed_duration_difference_seconds") is not None:
+        print(f"Feed durations differ by {m['feed_duration_difference_seconds']:.2f} s")
+    if "standard" in (m.get("feeds") or {}) and not m.get("standard_offset_verified"):
+        print("Next: check the follow-cam offset with `soccer-vision feed-frames` and record it with "
+              "`soccer-vision feed-offset` so review clips can be cut from the follow-cam.")
+    if m.get("video_use_permission") != "granted":
+        print("Note: video_use_permission is not 'granted'.")
+
+
+def cmd_feed_offset(a):
+    from .veo import set_offset
+    m = set_offset(_repo() / "config" / f"{a.match_id}.json", a.seconds, a.verified_by)
+    print(f"standard_offset_seconds={m['standard_offset_seconds']:+.3f} verified by {m['standard_offset_verified_by']}")
+
+
+def cmd_feed_frames(a):
+    from .veo import feed_frames
+    out = feed_frames(_repo(), a.match_id, a.time, a.offset, Path(a.out))
+    print(out)
+
+
+def cmd_landmark_frame(a):
+    from .veo import landmark_frame
+    print(landmark_frame(Path(a.video), a.time, Path(a.out), a.grid))
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="soccer-vision", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -198,6 +254,8 @@ def build_parser():
     s.add_argument("--imgsz", type=int, default=1280); s.add_argument("--person-conf", type=float, default=0.25)
     s.add_argument("--ball-conf-keep", type=float, default=0.05); s.add_argument("--max-frames", type=int)
     s.add_argument("--annotated-video"); s.add_argument("--video-id"); s.add_argument("--run-id")
+    s.add_argument("--tile-size", type=int, help="tiled inference for wide frames (e.g. 1280 for a Veo panorama)")
+    s.add_argument("--tile-overlap", type=float, default=0.2)
     s.set_defaults(fn=cmd_export)
 
     s = sub.add_parser("candidates", help="Step 10 unverified transfer candidates")
@@ -240,6 +298,40 @@ def build_parser():
     s.add_argument("--config", default="config/pipeline.yaml"); s.add_argument("--manifest")
     s.add_argument("--stop-after"); s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_process)
+
+    s = sub.add_parser("ingest", help="Download a match video from a URL (e.g. a Veo link) and normalize it")
+    s.add_argument("--match-id", required=True); s.add_argument("--url", required=True)
+    s.add_argument("--feed", choices=["panorama", "standard"], help="default: detected from a Veo URL")
+    s.add_argument("--permission", choices=["pending", "granted", "denied"],
+                   help="record video-use permission in the manifest")
+    s.add_argument("--fps", type=int, default=25); s.add_argument("--max-width", type=int)
+    s.add_argument("--clip-seconds", type=float, help="only normalize the first N seconds (quick trial)")
+    s.set_defaults(fn=cmd_ingest)
+
+    s = sub.add_parser("veo", help="Ingest Veo panorama and/or follow-cam links, optionally process")
+    s.add_argument("--match-id", required=True)
+    s.add_argument("--panorama", help="panorama .mp4 URL (used for analysis)")
+    s.add_argument("--standard", help="follow-cam video.mp4 URL (used for review clips)")
+    s.add_argument("--permission", choices=["pending", "granted", "denied"])
+    s.add_argument("--process", action="store_true", help="run the pipeline after downloading")
+    s.add_argument("--config", help="default config/pipeline.veo.yaml")
+    s.add_argument("--clip-seconds", type=float, help="only use the first N seconds (quick trial)")
+    s.set_defaults(fn=cmd_veo)
+
+    s = sub.add_parser("feed-frames", help="Panorama frame at T over follow-cam frame at T+offset, to check alignment")
+    s.add_argument("--match-id", required=True); s.add_argument("--time", type=float, required=True)
+    s.add_argument("--offset", type=float, default=0.0); s.add_argument("--out", required=True)
+    s.set_defaults(fn=cmd_feed_frames)
+
+    s = sub.add_parser("feed-offset", help="Record the verified follow-cam offset (follow-cam = panorama + offset)")
+    s.add_argument("--match-id", required=True); s.add_argument("--seconds", type=float, required=True)
+    s.add_argument("--verified-by", required=True)
+    s.set_defaults(fn=cmd_feed_offset)
+
+    s = sub.add_parser("landmark-frame", help="Frame with a pixel grid for reading landmark coordinates")
+    s.add_argument("--video", required=True); s.add_argument("--time", type=float, required=True)
+    s.add_argument("--out", required=True); s.add_argument("--grid", type=int, default=100)
+    s.set_defaults(fn=cmd_landmark_frame)
 
     s = sub.add_parser("db-import-run", help="Load a processing run's metadata and candidates into the database")
     s.add_argument("--run-dir", required=True)

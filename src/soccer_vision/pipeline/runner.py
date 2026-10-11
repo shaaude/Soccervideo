@@ -47,6 +47,7 @@ class Context:
     run_id: str
     annotations_dir: Path
     outputs: dict = field(default_factory=dict)  # stage -> {name: path}
+    manifest_path: Path | None = None
 
     def path(self, name: str) -> Path:
         return self.run_dir / name
@@ -98,7 +99,7 @@ class Pipeline:
         run_dir = self.repo / "data" / "processed" / match_id / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         self.ctx = Context(self.repo, match_id, video, manifest, cfg, run_dir, run_id,
-                           self.repo / "data" / "annotations" / match_id)
+                           self.repo / "data" / "annotations" / match_id, manifest_path=Path(manifest_path))
         self.basis = basis
         self.manifest_path = run_dir / "manifest.json"
         self.on_stage = on_stage

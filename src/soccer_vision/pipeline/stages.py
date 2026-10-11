@@ -33,6 +33,8 @@ def stage_inputs(name: str, ctx: Context) -> dict:
     lm = ctx.manifest.get("calibration_landmarks")
     if name == "calibrate" and lm:
         m["landmarks"] = _abs(ctx.repo, lm)
+    if name == "highlights" and ctx.manifest_path is not None:
+        m["match_manifest"] = ctx.manifest_path  # follow-cam offset lives here: changing it re-cuts clips
     return {k: v for k, v in m.items() if v is not None}
 
 
@@ -62,6 +64,11 @@ def stage_detect_track(ctx: Context):
     device = ctx.config["device"]
     person = UltralyticsPredictor(pw, device, det["imgsz"], min(det["person_conf"], det["ball_conf_keep"]))
     ball = UltralyticsPredictor(bw, device, det["imgsz"], det["ball_conf_keep"]) if bw else None
+    tiling = det.get("tiling") or {}
+    if tiling.get("enabled"):
+        from ..detection.tiling import TiledPredictor
+        person = TiledPredictor(person, tiling.get("tile_size", 1280), tiling.get("overlap", 0.2))
+        ball = TiledPredictor(ball, tiling.get("tile_size", 1280), tiling.get("overlap", 0.2)) if ball else None
     tr = det.get("tracker", {})
     cfg = ExportConfig(match_id=ctx.match_id, video_id=ctx.manifest["video_id"], run_id=ctx.run_id,
                        fps=float(ctx.manifest["normalized_fps"]), person_conf=det["person_conf"],
@@ -164,7 +171,25 @@ def stage_highlights(ctx: Context):
     h = ctx.config.get("highlights", {})
     out_dir = ctx.path("highlights")
     index = make_highlights(ctx.video, ev, out_dir, h.get("before", 4.0), h.get("after", 6.0))
-    return {"outputs": {"clip_index": out_dir / "clip_index.csv"}, "records": len(index)}
+    outs = {"clip_index": out_dir / "clip_index.csv"}
+    notes = f"{len(index)} clips from the analysis feed"
+    # Veo: also cut clips from the follow-cam ("standard") feed, which is easier for reviewers to watch.
+    m = ctx.manifest
+    feeds = m.get("feeds") or {}
+    review = m.get("review_feed")
+    if review and review != m.get("analysis_feed") and review in feeds:
+        offset = m.get("standard_offset_seconds")
+        if offset is None or not m.get("standard_offset_verified"):
+            notes += ("; follow-cam clips NOT cut: set and verify the follow-cam time offset "
+                      "(soccer-vision feed-offset) first")
+        else:
+            rv = ctx.repo / feeds[review]["normalized"]["path"]
+            rdir = ctx.path("highlights_review")
+            ridx = make_highlights(rv, ev, rdir, h.get("before", 4.0), h.get("after", 6.0),
+                                   time_offset=float(offset), skip_outside=True)
+            outs["review_clip_index"] = rdir / "clip_index.csv"
+            notes += f"; {len(ridx)} follow-cam clips (offset {offset:+.2f} s)"
+    return {"outputs": outs, "records": len(index), "notes": notes}
 
 
 def stage_review_queue(ctx: Context):

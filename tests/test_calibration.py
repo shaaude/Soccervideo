@@ -84,3 +84,43 @@ def test_overlapping_segments_rejected(tmp_path):
     p.write_text(json.dumps(spec))
     with pytest.raises(ValueError, match="overlap"):
         calibrate(p)
+
+
+def _panorama_like(fxy):
+    """Homography followed by a cylindrical horizontal warp, as in a stitched 180-degree panorama."""
+    p = to_img(fxy)
+    cx, f = 600.0, 300.0   # strong curvature, as across a 180-degree stitched view
+    return np.stack([cx + f * np.arctan((p[:, 0] - cx) / f), p[:, 1] + 0.00025 * (p[:, 0] - cx) ** 2], axis=1)
+
+
+def _grid_landmarks(tmp_path, model):
+    xs, ys = np.linspace(0, L, 6), np.linspace(0, W, 4)
+    pts = [(x, y) for x in xs for y in ys]
+    img = _panorama_like(pts)
+    hold = {3, 10, 17}
+    items = [{"image_xy": img[i].tolist(), "field_xy": list(pts[i]), "holdout": i in hold} for i in range(len(pts))]
+    spec = {"field_length_m": L, "field_width_m": W,
+            "segments": [{"start_frame": 0, "end_frame": 10, "model": model, "points": items}]}
+    p = tmp_path / f"pano-{model}.json"
+    p.write_text(json.dumps(spec))
+    return p
+
+
+def test_curved_panorama_rejects_homography_but_poly3_passes(tmp_path):
+    h = calibrate(_grid_landmarks(tmp_path, "homography"))["segments"][0]
+    p3 = calibrate(_grid_landmarks(tmp_path, "poly3"))["segments"][0]
+    assert h["status"] == "rejected"
+    assert p3["status"] == "calibrated" and p3["median_check_error_m"] < h["median_check_error_m"] / 5
+    t = calibrate(_grid_landmarks(tmp_path, "poly3"))
+    foot = _panorama_like([[30.0, 20.0]])[0]
+    out = project_tracks(pd.DataFrame({"frame_index": [5], "foot_x": [foot[0]], "foot_y": [foot[1]]}), t)
+    assert abs(out.field_x_m[0] - 30) < 1.0 and abs(out.field_y_m[0] - 20) < 1.0
+
+
+def test_poly3_needs_enough_landmarks(tmp_path):
+    p = landmark_file(tmp_path)
+    spec = json.loads(p.read_text())
+    spec["segments"][0]["model"] = "poly3"
+    p.write_text(json.dumps(spec))
+    s = calibrate(p)["segments"][0]
+    assert s["status"] == "uncalibrated" and "need >= 14" in s["reason"]
