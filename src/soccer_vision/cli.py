@@ -23,7 +23,8 @@ def _repo() -> Path:
 
 def cmd_normalize(a):
     from .normalize import normalize_video
-    rec = normalize_video(Path(a.input), Path(a.output), a.fps, a.max_width, a.crf, a.clip_seconds, a.start_seconds)
+    rec = normalize_video(Path(a.input), Path(a.output), a.fps, a.max_width, a.crf, a.clip_seconds, a.start_seconds,
+                          layout=a.layout)
     print(json.dumps({"normalized": rec["normalized"]["path"], "sha256": rec["normalized"]["sha256"],
                       "fps": rec["normalized"]["avg_frame_rate"], "duration_s": rec["normalized"]["duration_seconds"]}, indent=2))
 
@@ -192,6 +193,24 @@ def cmd_ingest(a):
           f"{n['duration_seconds'] / 60:.1f} min; manifest config/{a.match_id}.json")
 
 
+def cmd_add_video(a):
+    from .ingest import IngestError, ingest_file
+    try:
+        res = ingest_file(_repo(), a.match_id, Path(a.file), a.feed, a.permission, a.fps, a.max_width,
+                          a.clip_seconds, a.layout)
+    except IngestError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    n = res["record"]["normalized"]
+    print(f"{res['feed']}: {n['path']} {n['width']}x{n['height']} {n['fps']:.0f} fps "
+          f"{n['duration_seconds']:.1f} s; manifest config/{a.match_id}.json")
+    if a.process:
+        from .pipeline.runner import process, summarize
+        cfg = Path(a.config) if a.config else _repo() / "config" / "pipeline.veo.yaml"
+        state = process(_repo(), a.match_id, res["manifest"]["normalized_video"], cfg)
+        print(summarize(state).to_string(index=False))
+
+
 def cmd_veo(a):
     from .ingest import IngestError
     from .veo import run_veo
@@ -238,6 +257,8 @@ def build_parser():
     s.add_argument("--fps", type=int, default=25); s.add_argument("--max-width", type=int, default=1920)
     s.add_argument("--crf", type=int, default=18); s.add_argument("--clip-seconds", type=float)
     s.add_argument("--start-seconds", type=float, default=0.0)
+    s.add_argument("--layout", choices=["as_is", "stacked_halves"], default="as_is",
+                   help="stacked_halves: Veo app view with left half on top, right half below -> side by side")
     s.set_defaults(fn=cmd_normalize)
 
     s = sub.add_parser("validate-manifest")
@@ -317,6 +338,17 @@ def build_parser():
     s.add_argument("--config", help="default config/pipeline.veo.yaml")
     s.add_argument("--clip-seconds", type=float, help="only use the first N seconds (quick trial)")
     s.set_defaults(fn=cmd_veo)
+
+    s = sub.add_parser("add-video", help="Use a video file you already have (e.g. a Veo app screen recording)")
+    s.add_argument("--match-id", required=True); s.add_argument("--file", required=True)
+    s.add_argument("--feed", choices=["panorama", "standard"], default="panorama")
+    s.add_argument("--layout", choices=["as_is", "stacked_halves"], default="as_is",
+                   help="stacked_halves: Veo app view with the left half on top and the right half below")
+    s.add_argument("--permission", choices=["pending", "granted", "denied"])
+    s.add_argument("--fps", type=int, default=25); s.add_argument("--max-width", type=int)
+    s.add_argument("--clip-seconds", type=float)
+    s.add_argument("--process", action="store_true"); s.add_argument("--config")
+    s.set_defaults(fn=cmd_add_video)
 
     s = sub.add_parser("feed-frames", help="Panorama frame at T over follow-cam frame at T+offset, to check alignment")
     s.add_argument("--match-id", required=True); s.add_argument("--time", type=float, required=True)

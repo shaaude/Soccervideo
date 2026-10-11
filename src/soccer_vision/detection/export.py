@@ -73,6 +73,9 @@ class ExportConfig:
     track_activation_threshold: float = 0.25
     lost_track_buffer: int = 30
     minimum_matching_threshold: float = 0.8
+    # Optional pitch area (normalized-video pixels). People whose foot point is outside are dropped
+    # before tracking (spectators, benches). Only meaningful for a static camera such as a Veo panorama.
+    roi_polygon: list | None = None
 
 
 def _map(dets: RawDetections, cmap: ModelClassMap):
@@ -130,6 +133,13 @@ def export_detections(
                            minimum_matching_threshold=cfg.minimum_matching_threshold,
                            frame_rate=int(round(cfg.fps)))
     frames = frames if frames is not None else iter_frames(video, cfg.max_frames)
+    roi = None
+    if cfg.roi_polygon:
+        import cv2
+        roi = np.asarray(cfg.roi_polygon, np.float32).reshape(-1, 1, 2)
+        if len(roi) < 3:
+            raise ValueError("roi_polygon needs at least 3 points")
+    n_roi_dropped = 0
     tracks_tmp, balls_tmp = out_dir / "tracks.csv.tmp", out_dir / "balls.csv.tmp"
     sink = None
     n_frames = n_tracks = n_balls = frames_with_ball = 0
@@ -144,6 +154,11 @@ def export_detections(
             raw = person_predictor(frame)
             xyxy, conf, canon = _map(raw, classmap.person_model)
             pmask = np.isin(canon, PERSON_CLASSES) & (conf >= cfg.person_conf)
+            if roi is not None and pmask.any():
+                inside = np.array([cv2.pointPolygonTest(roi, (float((b[0] + b[2]) / 2), float(b[3])), False) >= 0
+                                   for b in xyxy], bool)
+                n_roi_dropped += int((pmask & ~inside).sum())
+                pmask &= inside
             people = sv.Detections(xyxy=xyxy[pmask].reshape(-1, 4), confidence=conf[pmask],
                                    class_id=canon[pmask])
             tracked = tracker.update_with_detections(people)
@@ -216,6 +231,7 @@ def export_detections(
         "distinct_track_ids": len(track_ids),
         "ball_rows": n_balls,
         "frames_with_ball_candidate": frames_with_ball,
+        "person_detections_outside_pitch_roi_dropped": n_roi_dropped,
         "elapsed_seconds": round(time.time() - t0, 2),
         "versions": _versions(),
         "note": "track_id is scoped to (video_id, run_id, segment_id); it is not a roster identity.",

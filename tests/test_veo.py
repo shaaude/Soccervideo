@@ -253,3 +253,21 @@ def test_follow_cam_only_link(server, tmp_path):
     assert m["normalized_video"] == "data/normalized/oct-match-standard.mp4"
     assert m["video_use_permission"] == "granted"          # from config/video_permissions.yaml
     assert any("no panorama feed" in x for x in msgs)
+
+
+def test_add_stacked_screen_recording(tmp_path):
+    """A Veo-app style recording (left half on top, right half below) becomes one side-by-side panorama."""
+    from soccer_vision.ingest import ingest_file
+    src = tmp_path / "rec.mov"
+    # top half white, bottom half dark blue -> after unstacking: white left, blue right
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=white:size=320x120:rate=30:d=2",
+                    "-f", "lavfi", "-i", "color=0x000080:size=320x122:rate=30:d=2", "-filter_complex", "[0][1]vstack",
+                    "-pix_fmt", "yuv420p", str(src)], check=True)
+    res = ingest_file(tmp_path / "repo", "rec1", src, permission="granted", layout="stacked_halves")
+    n = res["record"]["normalized"]
+    assert abs(n["seam_row"] - 120) <= 2 and n["width"] == 640 and n["height"] == n["seam_row"]
+    import cv2
+    ok, f = cv2.VideoCapture(str(tmp_path / "repo" / n["path"])).read()
+    assert f[60, 100].min() > 200                            # left = former top half (white)
+    assert f[60, 540, 0] > 90 and f[60, 540, 2] < 40         # right = former bottom half (blue)
+    assert res["manifest"]["video_use_permission"] == "granted" and src.exists()

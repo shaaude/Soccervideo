@@ -81,3 +81,25 @@ A full 90-minute panorama is about 135,000 frames, each split into 3–4 tiles. 
   panorama distortion may lower recall. Measure this on your first pilot match before trusting counts.
 * Veo links can expire. A 401/403/404/410 is reported as "link may have expired or need sign-in";
   get a fresh link from Veo and re-run. Completed downloads are reused.
+
+## Using a video file instead of a link (e.g. a screen recording of the Veo app)
+
+The Veo app shows the panorama as two stacked halves: the left half of the pitch on top, the right half
+below. `--layout stacked_halves` finds the seam and puts the halves back side by side:
+
+```bash
+soccer-vision add-video --match-id my-clip --file ~/Downloads/ScreenRecording.mov \
+  --layout stacked_halves --permission granted --process
+```
+
+Screen recordings have a variable frame rate and phone-screen resolution; they are fine for trials, but
+the downloaded panorama file has more detail. The two halves overlap slightly at the halfway line, so a
+player standing exactly there can appear twice.
+
+## Pitch area (recommended for every Veo camera position)
+
+The detector also finds parents, coaches and spectators. Because the Veo camera does not move, draw the
+pitch outline once and add it to the match manifest as `"pitch_roi_polygon": [[x, y], ...]` (pixel
+coordinates in the normalized video; use `soccer-vision landmark-frame` to read them). People whose feet
+are outside the outline are dropped before tracking; the count is recorded in `detection_meta.json`.
+Ball candidates are not filtered (a ball in the air can be outside the outline).

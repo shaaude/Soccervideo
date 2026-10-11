@@ -80,3 +80,13 @@ def test_class_map_mismatch_aborts(tmp_path):
     with pytest.raises(ClassMapError, match="does not match"):
         export_detections(None, tmp_path, ExportConfig("m1", "v", "r", 25.0), FakePredictor(wrong, []), cm,
                           ball_predictor=FakePredictor({0: "ball"}, []), frames=_frames(1))
+
+
+def test_pitch_roi_drops_people_outside(tmp_path):
+    cm = _single_model_map()
+    cfg = ExportConfig("m1", "v", "r", 25.0, roi_polygon=[[0, 0], [180, 0], [180, 240], [0, 240]])
+    meta = export_detections(None, tmp_path, cfg, FakePredictor(RF_NAMES, _script(10)), cm, frames=_frames(10))
+    t = read_tracks(tmp_path / "tracks.csv")
+    assert set(t.class_name) == {"player"}            # referee at x=210 is outside the area
+    assert meta["person_detections_outside_pitch_roi_dropped"] == 10
+    assert len(read_balls(tmp_path / "balls.csv")) == 20   # ball candidates are not filtered

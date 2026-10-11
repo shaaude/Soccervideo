@@ -1,0 +1,88 @@
+{
+  "match_id": "upload001",
+  "video_id": "upload001-panorama",
+  "season": "Fall 2026",
+  "competition": null,
+  "age_group": null,
+  "division": null,
+  "play_format": null,
+  "home_team_id": null,
+  "away_team_id": null,
+  "match_date": null,
+  "field_length_m": null,
+  "field_width_m": null,
+  "camera_id": "veo-panorama",
+  "camera_type": "veo_panorama_stitched_static",
+  "original_video": "data/raw/upload001-original.mov",
+  "normalized_video": "data/normalized/upload001-10fps.mp4",
+  "normalized_fps": 10,
+  "match_clock_offset_seconds": null,
+  "video_use_permission": "granted",
+  "video_use_permission_record": {
+    "permission": "granted",
+    "granted_by": "team Veo account owner",
+    "basis": "Screen recording of the team's own Veo panorama, uploaded by the account owner",
+    "recorded_at": "2026-10-11"
+  },
+  "source_note": "54 s phone screen recording of the Veo app (stacked halves), rebuilt side by side with --layout stacked_halves; analysed at 10 fps to fit CPU time",
+  "calibration_landmarks": null,
+  "roster": null,
+  "pitch_roi_polygon": [
+    [
+      95,
+      298
+    ],
+    [
+      240,
+      262
+    ],
+    [
+      560,
+      247
+    ],
+    [
+      900,
+      250
+    ],
+    [
+      1010,
+      256
+    ],
+    [
+      1140,
+      334
+    ],
+    [
+      1206,
+      338
+    ],
+    [
+      1300,
+      334
+    ],
+    [
+      1480,
+      262
+    ],
+    [
+      1720,
+      246
+    ],
+    [
+      2060,
+      248
+    ],
+    [
+      2280,
+      288
+    ],
+    [
+      2280,
+      599
+    ],
+    [
+      335,
+      599
+    ]
+  ]
+}

@@ -251,7 +251,8 @@ def update_manifest(path: Path, match_id: str, feed: str, record: dict, permissi
 
 def ingest_url(repo: Path, match_id: str, url: str, feed: str | None = None, permission: str | None = None,
                fps: int = 25, max_width: int | None = None, allow_private: bool = False,
-               hosts: tuple[str, ...] | None = None, clip_seconds: float | None = None, progress=None) -> dict:
+               hosts: tuple[str, ...] | None = None, clip_seconds: float | None = None, progress=None,
+               layout: str = "as_is") -> dict:
     if permission == "denied":
         raise IngestError("video_use_permission is 'denied': not downloading")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", match_id):
@@ -298,7 +299,7 @@ def ingest_url(repo: Path, match_id: str, url: str, feed: str | None = None, per
         raw.rename(raw.with_suffix(".invalid"))
         raise IngestError(f"Downloaded file is not a readable video: {e}") from e
     width = max_width or DEFAULT_MAX_WIDTH[feed]
-    rec = normalize_video(raw, norm, fps=fps, max_width=width, clip_seconds=clip_seconds)
+    rec = normalize_video(raw, norm, fps=fps, max_width=width, clip_seconds=clip_seconds, layout=layout)
     record = {
         "source": {"url": src.redacted_url, "query_redacted": "?" in url, "provider": src.provider,
                    "recording_id": src.recording_id, "feed": feed},
@@ -310,8 +311,56 @@ def ingest_url(repo: Path, match_id: str, url: str, feed: str | None = None, per
                        "width": rec["normalized"]["width"], "height": rec["normalized"]["height"],
                        "fps": rec["normalized"]["avg_frame_rate"],
                        "duration_seconds": rec["normalized"]["duration_seconds"],
-                       "max_width": width, "clip_seconds": clip_seconds},
+                       "max_width": width, "clip_seconds": clip_seconds, "layout": layout},
     }
     meta.write_text(json.dumps({**record, "download": dl}, indent=2))
     manifest = update_manifest(mpath, match_id, feed, record, permission, perm_rec)
+    return {"feed": feed, "record": record, "manifest": manifest}
+
+
+def ingest_file(repo: Path, match_id: str, path: Path, feed: str = "panorama", permission: str | None = None,
+                fps: int = 25, max_width: int | None = None, clip_seconds: float | None = None,
+                layout: str = "as_is") -> dict:
+    """Same as ingest_url for a video file you already have (e.g. a screen recording of the Veo app).
+
+    The file is copied into data/raw (the original is never modified), normalized, and the match
+    manifest gets a `feeds` entry exactly as for a downloaded link."""
+    if permission == "denied":
+        raise IngestError("video_use_permission is 'denied': not processing")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", match_id):
+        raise IngestError("match_id may contain letters, digits, '-' and '_' only")
+    if feed not in FEEDS:
+        raise IngestError("feed must be panorama or standard")
+    path, repo = Path(path), Path(repo)
+    if not path.is_file():
+        raise IngestError(f"No such file: {path}")
+    raw = repo / "data" / "raw" / f"{match_id}-{feed}-original{path.suffix.lower()}"
+    norm = repo / "data" / "normalized" / f"{match_id}-{feed}.mp4"
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    if raw.exists() and sha256_file(raw) != sha256_file(path):
+        raise IngestError(f"{raw.name} already exists with different content; use another match_id")
+    if not raw.exists():
+        shutil.copy2(path, raw)
+    try:
+        original = video_summary(raw)
+    except Exception as e:
+        raise IngestError(f"Not a readable video: {e}") from e
+    width = max_width or DEFAULT_MAX_WIDTH[feed]
+    rec = normalize_video(raw, norm, fps=fps, max_width=width, clip_seconds=clip_seconds, layout=layout)
+    perm_rec = ({"permission": permission, "basis": "given on the command line",
+                 "recorded_at": datetime.now(timezone.utc).date().isoformat()} if permission else None)
+    record = {
+        "source": {"url": None, "file_name": path.name, "provider": "file", "recording_id": None, "feed": feed},
+        "downloaded_at": datetime.now(timezone.utc).isoformat(),
+        "original": {"path": str(raw.relative_to(repo)), "sha256": sha256_file(raw), "bytes": raw.stat().st_size,
+                     "width": original["width"], "height": original["height"],
+                     "fps": original["avg_frame_rate"], "duration_seconds": original["duration_seconds"]},
+        "normalized": {"path": str(norm.relative_to(repo)), "sha256": rec["normalized"]["sha256"],
+                       "width": rec["normalized"]["width"], "height": rec["normalized"]["height"],
+                       "fps": rec["normalized"]["avg_frame_rate"],
+                       "duration_seconds": rec["normalized"]["duration_seconds"],
+                       "max_width": width, "clip_seconds": clip_seconds, "layout": layout,
+                       "seam_row": rec["parameters"].get("seam_row")},
+    }
+    manifest = update_manifest(repo / "config" / f"{match_id}.json", match_id, feed, record, permission, perm_rec)
     return {"feed": feed, "record": record, "manifest": manifest}

@@ -72,7 +72,8 @@ def stage_detect_track(ctx: Context):
     tr = det.get("tracker", {})
     cfg = ExportConfig(match_id=ctx.match_id, video_id=ctx.manifest["video_id"], run_id=ctx.run_id,
                        fps=float(ctx.manifest["normalized_fps"]), person_conf=det["person_conf"],
-                       ball_conf_keep=det["ball_conf_keep"], max_frames=det.get("max_frames"), **tr)
+                       ball_conf_keep=det["ball_conf_keep"], max_frames=det.get("max_frames"),
+                       roi_polygon=ctx.manifest.get("pitch_roi_polygon"), **tr)
     annotated = ctx.path("tracking_annotated.mp4") if det.get("annotated_video") else None
     meta = export_detections(ctx.video, ctx.run_dir, cfg, person, cm, ball, annotated_video=annotated,
                              weights_info=weights_info(pw, bw))
