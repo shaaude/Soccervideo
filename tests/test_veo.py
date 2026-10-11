@@ -156,7 +156,7 @@ def test_pipeline_cuts_follow_cam_clips_only_after_offset_is_verified(server, tm
     from soccer_vision.pipeline.runner import process
     st = process(repo, "veo1", "data/normalized/veo1-panorama.mp4", repo / "config/pipeline.yaml")
     assert "follow-cam clips NOT cut" in st["stages"]["highlights"]["notes"]
-    set_offset(repo / "config/veo1.json", 0.0, "coach-s")
+    set_offset(repo / "config/veo1.json", 0.0, "reviewer-1")
     st2 = process(repo, "veo1", "data/normalized/veo1-panorama.mp4", repo / "config/pipeline.yaml")
     assert "3 follow-cam clips" in st2["stages"]["highlights"]["notes"]
     assert st2["run_id"] == st["run_id"]  # only highlights re-ran
@@ -235,7 +235,7 @@ def test_recorded_permission_is_applied_without_flag(server, tmp_path):
     res = ingest_url(repo, "veo9", server["base"] + PANO, allow_private=True, hosts=HOSTS)
     m = res["manifest"]
     assert m["video_use_permission"] == "granted"
-    assert m["video_use_permission_record"]["granted_by"] == "Shaman Singh"
+    assert m["video_use_permission_record"]["granted_by"] == "team Veo account owner"
     # an unlisted recording stays pending
     res2 = ingest_url(repo, "veo10", server["base"] + OTHER, allow_private=True, hosts=HOSTS)
     assert res2["manifest"]["video_use_permission"] == "pending"

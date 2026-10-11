@@ -44,7 +44,7 @@ job; the downloaded feed is registered as video `<match>-<feed>` and can be proc
    ```
    When the panorama and follow-cam show the same moment, record it:
    ```bash
-   soccer-vision feed-offset --match-id <m> --seconds 0 --verified-by "S"
+   soccer-vision feed-offset --match-id <m> --seconds 0 --verified-by "reviewer-1"
    ```
    Until then, review clips come from the panorama only. After it is set, re-running `process` cuts
    follow-cam clips too (only the clip stage re-runs), and the review app shows both views:
