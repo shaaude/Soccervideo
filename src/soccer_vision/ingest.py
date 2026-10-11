@@ -192,6 +192,20 @@ def download(url: str, dest: Path, max_bytes: int = 30 * 1024**3, retries: int =
             "resumed": resumed, "attempts": attempts}
 
 
+def recorded_permission(repo: Path, recording_id: str | None) -> dict | None:
+    """Permission recorded in config/video_permissions.yaml for this recording, if any."""
+    import yaml
+    path = Path(repo) / "config" / "video_permissions.yaml"
+    if not recording_id or not path.exists():
+        return None
+    entry = ((yaml.safe_load(path.read_text()) or {}).get("recordings") or {}).get(recording_id)
+    if entry is None:
+        return None
+    if entry.get("permission") not in ("pending", "granted", "denied"):
+        raise IngestError(f"config/video_permissions.yaml: invalid permission for {recording_id}")
+    return {k: str(v) for k, v in entry.items() if k in ("permission", "granted_by", "basis", "recorded_at")}
+
+
 def _manifest_template(match_id: str) -> dict:
     return {"match_id": match_id, "video_id": None, "season": None, "competition": None, "age_group": None,
             "division": None, "play_format": None, "home_team_id": None, "away_team_id": None,
@@ -201,7 +215,8 @@ def _manifest_template(match_id: str) -> dict:
             "calibration_landmarks": None, "roster": None}
 
 
-def update_manifest(path: Path, match_id: str, feed: str, record: dict, permission: str | None) -> dict:
+def update_manifest(path: Path, match_id: str, feed: str, record: dict, permission: str | None,
+                    permission_record: dict | None = None) -> dict:
     m = load_manifest(path) if path.exists() else _manifest_template(match_id)
     if m["match_id"] != match_id:
         raise IngestError(f"{path} belongs to match {m['match_id']}")
@@ -222,6 +237,8 @@ def update_manifest(path: Path, match_id: str, feed: str, record: dict, permissi
     m.setdefault("standard_offset_verified", False)
     if permission:
         m["video_use_permission"] = permission
+    if permission_record:
+        m["video_use_permission_record"] = permission_record
     if "panorama" in feeds and "standard" in feeds:
         d = abs(feeds["panorama"]["normalized"]["duration_seconds"] - feeds["standard"]["normalized"]["duration_seconds"])
         m["feed_duration_difference_seconds"] = round(d, 3)
@@ -240,12 +257,20 @@ def ingest_url(repo: Path, match_id: str, url: str, feed: str | None = None, per
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", match_id):
         raise IngestError("match_id may contain letters, digits, '-' and '_' only")
     src = validate_url(url, hosts, allow_private)
+    repo = Path(repo)
+    perm_rec = recorded_permission(repo, src.recording_id)
+    if permission is None and perm_rec:
+        permission = perm_rec["permission"]
+    elif permission is not None:
+        perm_rec = {"permission": permission, "basis": "given on the command line / API request",
+                    "recorded_at": datetime.now(timezone.utc).date().isoformat()}
+    if permission == "denied":
+        raise IngestError("video_use_permission is 'denied' for this recording: not downloading")
     feed = feed or src.feed_hint
     if feed not in FEEDS:
         raise IngestError("Say which feed this is with --feed panorama|standard (could not tell from the URL)")
     if src.feed_hint and src.feed_hint != feed:
         raise IngestError(f"URL looks like the {src.feed_hint} feed but --feed {feed} was given")
-    repo = Path(repo)
     raw = repo / "data" / "raw" / f"{match_id}-{feed}-original.mp4"
     norm = repo / "data" / "normalized" / f"{match_id}-{feed}.mp4"
     meta = repo / "data" / "raw" / f"{match_id}-{feed}.ingest.json"
@@ -288,5 +313,5 @@ def ingest_url(repo: Path, match_id: str, url: str, feed: str | None = None, per
                        "max_width": width, "clip_seconds": clip_seconds},
     }
     meta.write_text(json.dumps({**record, "download": dl}, indent=2))
-    manifest = update_manifest(mpath, match_id, feed, record, permission)
+    manifest = update_manifest(mpath, match_id, feed, record, permission, perm_rec)
     return {"feed": feed, "record": record, "manifest": manifest}

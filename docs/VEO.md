@@ -13,7 +13,7 @@ Veo gives two files for each recording. Use both:
 soccer-vision veo --match-id 2026-10-04-gu12-vs-alexandria \
   --panorama "https://c.veocdn.com/<recording>/panorama/transcode-<id>.mp4" \
   --standard "https://c.veocdn.com/<recording>/standard/machine/<id>/video.mp4" \
-  --permission granted --process
+  --process            # permission comes from config/video_permissions.yaml
 ```
 
 This downloads both files (resumable, size and disk checks, originals kept in `data/raw/`). It normalizes
@@ -34,8 +34,10 @@ job; the downloaded feed is registered as video `<match>-<feed>` and can be proc
 ## Before results mean anything: three checks people must make
 
 1. **Permission.** Only process recordings you are allowed to use (your own team's Veo account,
-   league/club policy, parents' consent for youth footage). `--permission granted` is your statement of
-   that and is stored in the manifest. Videos and crops never go into Git (`data/` is ignored).
+   league/club policy, parents' consent for youth footage). Record it once per recording in
+   `config/video_permissions.yaml` (recording ID, who granted it, basis); ingest then applies it
+   automatically and copies the record into the match manifest. `--permission` on the command line
+   overrides it for one run. Videos and crops never go into Git (`data/` is ignored).
 2. **Follow-cam time offset.** The two feeds usually line up, but this is not assumed. Compare frames:
    ```bash
    soccer-vision feed-frames --match-id <m> --time 600 --offset 0 --out reports/offset-check.png

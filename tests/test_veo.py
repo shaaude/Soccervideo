@@ -226,3 +226,16 @@ def test_api_video_from_url(server, tmp_path, monkeypatch):
     assert r.status_code == 422 and "allowlist" in r.json()["detail"]
     # the registered panorama can now be processed through the normal endpoint
     assert c.post("/api/v1/matches/veo1/process", headers=H, json={"video_id": "veo1-panorama"}).status_code == 202
+
+
+def test_recorded_permission_is_applied_without_flag(server, tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "config").mkdir(parents=True)
+    shutil.copy(REPO / "config/video_permissions.yaml", repo / "config")
+    res = ingest_url(repo, "veo9", server["base"] + PANO, allow_private=True, hosts=HOSTS)
+    m = res["manifest"]
+    assert m["video_use_permission"] == "granted"
+    assert m["video_use_permission_record"]["granted_by"] == "Shaman Singh"
+    # an unlisted recording stays pending
+    res2 = ingest_url(repo, "veo10", server["base"] + OTHER, allow_private=True, hosts=HOSTS)
+    assert res2["manifest"]["video_use_permission"] == "pending"
