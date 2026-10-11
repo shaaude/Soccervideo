@@ -239,3 +239,17 @@ def test_recorded_permission_is_applied_without_flag(server, tmp_path):
     # an unlisted recording stays pending
     res2 = ingest_url(repo, "veo10", server["base"] + OTHER, allow_private=True, hosts=HOSTS)
     assert res2["manifest"]["video_use_permission"] == "pending"
+
+
+def test_follow_cam_only_link(server, tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "config").mkdir(parents=True)
+    shutil.copy(REPO / "config/video_permissions.yaml", repo / "config")
+    msgs = []
+    res = run_veo(repo, "oct-match", None, server["base"] + STD, None, clip_seconds=5,
+                  allow_private=True, hosts=HOSTS, log=msgs.append)
+    m = res["manifest"]
+    assert m["analysis_feed"] == m["review_feed"] == "standard"
+    assert m["normalized_video"] == "data/normalized/oct-match-standard.mp4"
+    assert m["video_use_permission"] == "granted"          # from config/video_permissions.yaml
+    assert any("no panorama feed" in x for x in msgs)
