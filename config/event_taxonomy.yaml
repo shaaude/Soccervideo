@@ -1,0 +1,70 @@
+# Event taxonomy (Step 9). Version this file; annotators and code must use the same definitions.
+# Do not mix SoccerNet labels with these local labels without an explicit mapping file.
+version: local-v1
+
+review_statuses: [unreviewed, verified, corrected, rejected, unobservable]
+# Statuses that count as human-confirmed for aggregation.
+confirmed_statuses: [verified, corrected]
+
+event_types:
+  ball_transfer_candidate:
+    machine_only: true          # may never be marked verified/corrected; reviewer must choose a real type
+    actor_required: false
+    outcomes: [unknown]
+  pass:
+    actor_required: true
+    receiver_applicable: true
+    outcomes: [completed, incomplete, unknown]
+    definition: >-
+      Intentional ball played by the actor toward a teammate or space. Completed if the next
+      controlled touch is by a teammate; incomplete if by an opponent or the ball leaves play.
+      Deflections that change possession are incomplete; unintentional touches are not passes.
+  cross:
+    actor_required: true
+    receiver_applicable: true
+    outcomes: [completed, incomplete, unknown]
+    definition: Pass from a wide area into the penalty area. Counted separately from pass.
+  shot:
+    actor_required: true
+    outcomes: [goal, saved, blocked, missed, unknown]
+    definition: Intentional attempt on goal. A shot that scores has outcome 'goal'.
+  goal:
+    actor_required: false       # scorer is attributed through the shot event; own goals have no attacker actor
+    outcomes: [not_applicable]
+    definition: >-
+      Team-level marker that a goal was awarded. Player goal counts come from shot outcome 'goal'
+      so a goal is never counted twice.
+  ball_recovery:
+    actor_required: true
+    outcomes: [not_applicable]
+    definition: Player gains control of a loose ball with no clear opponent possession.
+  interception:
+    actor_required: true
+    outcomes: [not_applicable]
+    definition: Player intercepts an opponent's pass before it reaches its target.
+  tackle:
+    actor_required: true
+    outcomes: [won, lost, unknown]
+    definition: Challenge on an opponent in possession. Won if the tackler's team gains control.
+  corner:
+    actor_required: true
+    outcomes: [not_applicable]
+  free_kick:
+    actor_required: true
+    outcomes: [not_applicable]
+  throw_in:
+    actor_required: true
+    outcomes: [not_applicable]
+  ball_out:
+    actor_required: false
+    outcomes: [not_applicable]
+
+# Assist criteria: an assist is NOT awarded merely because a pass preceded a goal (Step 26).
+# Assists require a reviewed possession-sequence link and are not computed in local-v1.
+
+annotation_rules:
+  - Annotate every observable event in the reviewed interval, including ones the model missed.
+  - Use 'unobservable' when the camera did not show the action; never guess.
+  - Set actor to UNKNOWN when the event is certain but the player cannot be identified.
+  - Goalkeeper handling is not a pass; goalkeeper distribution by hand or foot is a pass.
+  - Contested possession with no clear control: no recovery/interception event.

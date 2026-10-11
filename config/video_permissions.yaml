@@ -1,0 +1,13 @@
+# Recorded video-use permission per source recording. `soccer-vision veo` / `ingest` read this when
+# --permission is not given, and copy the permission and its basis into the match manifest.
+# Add one entry per recording you are allowed to analyse. Remove an entry to withdraw it.
+recordings:
+  67766a5f-59d6-4021-ae4c-2e1f8058aa3f:
+    provider: veo
+    permission: granted
+    granted_by: team Veo account owner
+    basis: Recording from the user's own team's Veo account
+    recorded_at: "2026-10-11"
+    feeds:
+      panorama: https://c.veocdn.com/67766a5f-59d6-4021-ae4c-2e1f8058aa3f/panorama/transcode-520becdc-1ef6-4642-b320-19e68d5b620b.mp4
+      standard: https://c.veocdn.com/67766a5f-59d6-4021-ae4c-2e1f8058aa3f/standard/machine/68ffd7d8/video.mp4

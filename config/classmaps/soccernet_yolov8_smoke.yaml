@@ -1,0 +1,8 @@
+# Smoke-test only: community YOLOv8 checkpoint trained on SoccerNet frames
+# (github.com/Mostafa-Nafie/Football-Object-Detection, weights/best.pt, no license file;
+# SoccerNet data terms apply). Not for production. Shows that the exporter is detector-agnostic:
+# its class numbering differs from Roboflow's and is mapped onto the canonical classes here.
+name: soccernet_yolov8_smoke
+person_model:
+  expected_names: {0: Player, 1: GoalKeeper, 2: Ball, 3: Main Referee, 4: Side Referee, 5: Staff Member}
+  map: {0: player, 1: goalkeeper, 2: ball, 3: referee, 4: referee}   # 5 (staff) intentionally dropped

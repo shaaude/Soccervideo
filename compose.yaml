@@ -1,0 +1,24 @@
+# Local-only PostgreSQL for the pilot (Step 13). Bound to 127.0.0.1; password from the ignored .env file.
+#   echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+#   docker compose up -d db
+#   export SOCCER_DATABASE_URL=postgresql+psycopg://soccer:${POSTGRES_PASSWORD}@127.0.0.1:5432/soccervision
+#   alembic upgrade head
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: soccer
+      POSTGRES_DB: soccervision
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - soccervision-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soccer -d soccervision"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  soccervision-pgdata:

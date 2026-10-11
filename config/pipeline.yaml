@@ -1,0 +1,44 @@
+# Pipeline configuration (Step 24). Part of the run hash: any change produces a new run directory.
+device: cpu                      # cpu | cuda | mps   (SOCCER_DEVICE env var overrides)
+require_production_manifest: false   # true: all PRODUCTION_REQUIRED manifest values + permission 'granted'
+
+detection:
+  class_map: config/classmaps/roboflow_football.yaml
+  player_weights: third_party/roboflow-sports/examples/soccer/data/football-player-detection.pt
+  ball_weights: third_party/roboflow-sports/examples/soccer/data/football-ball-detection.pt   # null: ball class from player model
+  imgsz: 1280
+  person_conf: 0.25
+  ball_conf_keep: 0.05           # low-confidence ball alternatives are kept for debugging
+  max_frames: null               # limit for smoke tests only
+  annotated_video: true
+  tracker:
+    track_activation_threshold: 0.25
+    lost_track_buffer: 30
+    minimum_matching_threshold: 0.8
+
+identity:
+  team_clustering: true
+  samples_per_track: 8
+  review_crops_per_track: 5
+
+calibration:
+  max_median_error_m: 2.0        # proposed first gate; tighten before speed/distance analysis
+  accept_unvalidated: false
+
+candidates:
+  ball_threshold: 0.15
+  player_threshold: 0.25
+  max_distance: 0.45
+  margin: 0.08
+  support_window: 7
+  support_min: 3
+  segment_gap_s: 0.35
+  min_transfer_gap_s: 0.12
+  max_transfer_gap_s: 4.0
+
+highlights:
+  before: 4.0
+  after: 6.0
+
+temporal_model:
+  enabled: false                 # no trained, validated model exists yet (Steps 11 and 26)
