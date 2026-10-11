@@ -73,6 +73,9 @@ def cmd_candidates(a):
     from .events.candidates import CandidateParams, generate_with_audit, load_inputs, params_dict
     tracks, balls = load_inputs(a.tracks, a.balls, a.match_id)
     p = CandidateParams(fps=a.fps)
+    from .events.ball import clean_balls
+    balls, stats = clean_balls(balls[balls["confidence"] >= p.ball_threshold], p.fps)
+    print(f"Ball cleaning: {stats}")
     contacts, events, suppressed = generate_with_audit(tracks, balls, a.match_id, p)
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)

@@ -165,6 +165,63 @@ def histogram(values, bins, width=460, height=200, xlabel="") -> str:
   <text x="{(width + pad_l) / 2:.0f}" y="{height - 2}" class="tick" text-anchor="middle">{_esc(xlabel)}</text></svg>'''
 
 
+def pitch_zones_svg(grid, length_m, width_m, width=620) -> str:
+    """Top-down pitch with ball-time share per zone (sequential blue), labelled with percentages."""
+    ny, nx = grid.shape
+    pad = 14
+    W = width - 2 * pad
+    H = W * width_m / length_m
+    sx, sy = W / length_m, H / width_m
+    lut = _ramp_lut(BLUE_RAMP)
+    vmax = grid.max() or 1
+    cells = ""
+    for j in range(ny):
+        for i in range(nx):
+            v = grid[j, i]
+            c = lut[int(40 + 215 * v / vmax)] if v > 0 else None
+            fill = f"rgb({c[0]:.0f},{c[1]:.0f},{c[2]:.0f})" if c is not None else "transparent"
+            x, y = pad + i * W / nx, pad + j * H / ny
+            ink = "#ffffff" if v / vmax > 0.55 else "var(--text-primary)"
+            cells += (f'<g data-tip="{v * 100:.0f}% of ball time"><rect x="{x + 1:.1f}" y="{y + 1:.1f}" width="{W / nx - 2:.1f}" '
+                      f'height="{H / ny - 2:.1f}" rx="3" fill="{fill}"/>'
+                      f'<text x="{x + W / nx / 2:.1f}" y="{y + H / ny / 2 + 4:.1f}" text-anchor="middle" class="zlab" fill="{ink}">'
+                      f'{v * 100:.0f}%</text></g>')
+    cx, cy = pad + W / 2, pad + H / 2
+    pa_d, pa_w = 16.5 * sx, 40.3 * sy
+    lines = (f'<rect x="{pad}" y="{pad}" width="{W:.1f}" height="{H:.1f}" class="pl"/>'
+             f'<line x1="{cx:.1f}" x2="{cx:.1f}" y1="{pad}" y2="{pad + H:.1f}" class="pl"/>'
+             f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{9.15 * sx:.1f}" class="pl"/>'
+             f'<rect x="{pad}" y="{cy - pa_w / 2:.1f}" width="{pa_d:.1f}" height="{pa_w:.1f}" class="pl"/>'
+             f'<rect x="{pad + W - pa_d:.1f}" y="{cy - pa_w / 2:.1f}" width="{pa_d:.1f}" height="{pa_w:.1f}" class="pl"/>')
+    return (f'<svg viewBox="0 0 {width} {H + 2 * pad:.0f}" class="chart pitch" role="img" '
+            f'aria-label="Share of ball time per pitch zone">{cells}{lines}</svg>')
+
+
+EVENT_ROWS = [  # (label, event_type, outcome filter or None)
+    ("Passes completed", "pass", "completed"), ("Passes not completed", "pass", "incomplete"),
+    ("Crosses", "cross", None), ("Shots", "shot", None), ("Shots on target", "shot", ("goal", "saved")),
+    ("Goals (from shots)", "shot", "goal"), ("Corners", "corner", None), ("Free kicks", "free_kick", None),
+    ("Throw-ins", "throw_in", None), ("Battles won (tackles)", "tackle", "won"),
+    ("Battles lost (tackles)", "tackle", "lost"), ("Interceptions", "interception", None),
+    ("Ball recoveries", "ball_recovery", None),
+]
+
+
+def event_counts(reviews: pd.DataFrame) -> list[tuple[str, int]]:
+    if reviews is None or reviews.empty:
+        return [(lab, 0) for lab, _, _ in EVENT_ROWS]
+    ok = reviews[reviews["review_status"].isin(["verified", "corrected"])]
+    out = []
+    for lab, et, oc in EVENT_ROWS:
+        s = ok[ok["event_type"] == et]
+        if isinstance(oc, tuple):
+            s = s[s["outcome"].isin(oc)]
+        elif oc:
+            s = s[s["outcome"] == oc]
+        out.append((lab, len(s)))
+    return out
+
+
 def _mmss(s):
     s = int(round(s))
     return f"{s // 60}:{s % 60:02d}"
@@ -196,7 +253,9 @@ def build_report(repo: Path, run_dir: Path, out: Path | None = None) -> Path:
     n_frames = int(meta["frames_processed"])
     duration = n_frames / fps
     ball_thr = float(cand_params.get("ball_threshold", 0.15))
-    ball_frames = set(balls.loc[balls["confidence"] >= ball_thr, "frame_index"].astype(int))
+    from .events.ball import clean_balls
+    balls, ball_clean = clean_balls(balls[balls["confidence"] >= ball_thr], fps, manifest.get("pitch_roi_polygon"))
+    ball_frames = set(balls["frame_index"].astype(int))
     ball_pct = 100.0 * len(ball_frames) / max(n_frames, 1)
     per_frame = tracks.groupby("frame_index").size().reindex(range(n_frames), fill_value=0)
     track_len = tracks.groupby("track_id")["frame_index"].agg(lambda s: (s.max() - s.min() + 1) / fps)
@@ -228,6 +287,64 @@ def build_report(repo: Path, run_dir: Path, out: Path | None = None) -> Path:
             n_tr = int(clusters["cluster"].eq(k).sum())
             team_imgs.append((label, n_tr, density_image(frame, sub["foot_x"], sub["foot_y"], ramp, width=1200),
                               "series1" if k == 0 else "series2"))
+
+    best_ball = balls[balls["confidence"] >= ball_thr].sort_values(["frame_index", "confidence"], ascending=[True, False])
+    best_ball = best_ball.drop_duplicates("frame_index")
+    img_ball = density_image(frame, best_ball["center_x"], best_ball["center_y"], ORANGE_RAMP, sigma_px=18) \
+        if len(best_ball) else None
+    stacked = any((f.get("normalized") or {}).get("layout") == "stacked_halves"
+                  for f in (manifest.get("feeds") or {}).values()) or "stacked" in str(manifest.get("source_note", ""))
+    half_html = ""
+    if len(best_ball):
+        mid = frame.shape[1] / 2
+        left = float((best_ball["center_x"] < mid).mean())
+        half_html = (f'<div class="split"><div style="flex:{left:.3f}" class="sl"><span>Left half {left * 100:.0f}%</span></div>'
+                     f'<div style="flex:{1 - left:.3f}" class="sr"><span>Right half {(1 - left) * 100:.0f}%</span></div></div>'
+                     '<p class="lead" style="margin-top:6px">Share of moments the ball was seen on each side of the halfway line, '
+                     'as the camera shows it'
+                     + (' (the strip around the halfway line appears in both halves of this view)' if stacked else '') + '.</p>')
+
+    # calibrated extras: top-down ball zones and distance while tracked
+    pitch_html, dist_html = "", ""
+    tf, tr = run_dir / "tracks_field.parquet", run_dir / "transforms.json"
+    if tf.exists() and tr.exists():
+        from .analytics.movement import ball_zones, player_distances, project_ball_ground, track_distances
+        transforms = json.loads(tr.read_text())
+        L, Wd = transforms["field_length_m"], transforms["field_width_m"]
+        bxy = project_ball_ground(balls, transforms, ball_thr)
+        if len(bxy):
+            pitch_html = (f"<p class='lead'>Top-down pitch ({L:g} × {Wd:g} m{' — assumed size' if manifest.get('pitch_size_assumed') else ''}). "
+                          f"Based on {len(bxy):,} ball sightings; zones, not exact spots, because a ball in the air "
+                          "looks further away than it is.</p>" + pitch_zones_svg(ball_zones(bxy, L, Wd), L, Wd))
+        per_track = track_distances(pd.read_parquet(tf), fps)
+        assign_p = run_dir / "tracklet_assignments.csv"
+        per_player = player_distances(per_track, pd.read_csv(assign_p, dtype={"player_id": str})
+                                      if assign_p.exists() else None)
+        if len(per_player):
+            body = "".join(f"<tr><td>{_esc(r.player_id)}</td><td class='num'>{r.distance_m:,.0f} m</td>"
+                           f"<td class='num'>{_mmss(r.tracked_seconds)}</td><td class='num'>{r.tracklets}</td></tr>"
+                           for r in per_player.itertuples(index=False))
+            dist_html = ("<table><thead><tr><th>Player</th><th>Distance while tracked</th><th>Time tracked</th>"
+                         f"<th>Track pieces</th></tr></thead><tbody>{body}</tbody></table>")
+        elif len(per_track):
+            top = per_track.sort_values("distance_m", ascending=False).head(12)
+            body = "".join(f"<tr><td>#{r.track_id}</td><td class='num'>{r.distance_m:,.0f} m</td>"
+                           f"<td class='num'>{_mmss(r.tracked_seconds)}</td><td class='num'>"
+                           f"{'—' if r.top_speed_ms is None else f'{r.top_speed_ms * 3.6:.0f} km/h'}</td></tr>"
+                           for r in top.itertuples(index=False))
+            dist_html = ("<p class='lead'>Per tracker ID, because no identities have been confirmed yet: one player can "
+                         "appear as several IDs, so these are pieces of runs, not match totals.</p><table><thead><tr>"
+                         "<th>Tracker ID</th><th>Distance while tracked</th><th>Time tracked</th><th>Fast running (95th pct)</th>"
+                         f"</tr></thead><tbody>{body}</tbody></table>")
+    if not pitch_html:
+        pitch_html = ("<p class='empty'>Needs pitch calibration: mark at least 14 pitch points on a frame once for this "
+                      "camera position (docs/VEO.md). An assumed 11v11 size (105 × 68 m) can be used for the pitch "
+                      "dimensions, but the points must come from the video.</p>")
+    if not dist_html:
+        dist_html = ("<p class='empty'>Needs pitch calibration (to turn pixels into metres) and confirmed player "
+                     "identities (each player currently splits into many short tracker IDs).</p>")
+    ev_counts = event_counts(reviews)
+    ev_html = "".join(f"<tr><td>{_esc(lab)}</td><td class='num'>{n}</td></tr>" for lab, n in ev_counts)
 
     t_axis = np.arange(n_frames) / fps
     step = max(1, n_frames // 400)
@@ -287,7 +404,9 @@ def build_report(repo: Path, run_dir: Path, out: Path | None = None) -> Path:
         f"Analysed {duration:.0f} s at {fps:g} frames per second ({n_frames} frames).",
         f"The tracker issued {meta['distinct_track_ids']} player IDs; {long_tracks} lasted 5 s or more. "
         "Players lose their ID after occlusions, so per-player tracking across the clip is not reliable yet.",
-        f"The ball was seen clearly in {ball_pct:.0f}% of frames; passes are only proposed where it is seen.",
+        f"The ball was seen clearly in {ball_pct:.0f}% of frames; passes are only proposed where it is seen. "
+        f"{ball_clean['static_removed']} detections of a motionless object and {ball_clean['outside_pitch_removed']} "
+        "off-pitch detections were not counted as the ball.",
     ]
     if meta.get("person_detections_outside_pitch_roi_dropped"):
         quality.append(f"{meta['person_detections_outside_pitch_roi_dropped']:,} detections outside the pitch outline "
@@ -311,7 +430,11 @@ def build_report(repo: Path, run_dir: Path, out: Path | None = None) -> Path:
         k_dur=_mmss(duration), k_people=f"{per_frame.median():.0f}", k_ball=f"{ball_pct:.0f}%",
         k_pass=str(len(events)), k_pass_sub=f"{n_conf} confirmed · {n_rej} rejected · {len(events) - n_conf - n_rej} to review",
         img_all=img_all, team_html=team_html, line=line, strip=strip, hist=hist, rows=rows, prof_html=prof_html,
-        quality_html=quality_html, table_rows=table_rows, n_tracks=meta["distinct_track_ids"], long_tracks=long_tracks)
+        quality_html=quality_html, table_rows=table_rows, n_tracks=meta["distinct_track_ids"], long_tracks=long_tracks,
+        ball_img=(f'<figure><img src="{img_ball}" alt="Where the ball was seen"></figure>' if img_ball else
+                  "<p class='empty'>The ball was not detected clearly enough to map.</p>"),
+        half_html=half_html, pitch_html=pitch_html, dist_html=dist_html, ev_html=ev_html,
+        n_confirmed=int(reviews["review_status"].isin(["verified", "corrected"]).sum()) if len(reviews) else 0)
     out = Path(out or run_dir / "report.html")
     out.write_text(page, encoding="utf-8")
     return out
@@ -398,6 +521,11 @@ details table {{ max-width:420px; }}
 #tip {{ position:fixed; pointer-events:none; background:var(--text-primary); color:var(--surface-1); font-size:12px;
   padding:5px 8px; border-radius:6px; opacity:0; transition:opacity .08s; z-index:10; white-space:nowrap; }}
 footer {{ color:var(--text-muted); font-size:12px; margin-top:24px; }}
+.split {{ display:flex; gap:2px; height:28px; margin-top:12px; font-size:12px; }}
+.split > div {{ display:flex; align-items:center; padding:0 10px; border-radius:4px; min-width:90px; }}
+.split .sl {{ background:var(--series-2); color:#fff; }} .split .sr {{ background:var(--surface-2); color:var(--text-primary); justify-content:flex-end; }}
+.chart.pitch .pl {{ fill:none; stroke:var(--text-muted); stroke-width:1.5; }}
+.chart.pitch .zlab {{ font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }}
 @media (max-width:760px) {{ .kpis {{ grid-template-columns:1fr 1fr; }} .teams, .two {{ grid-template-columns:1fr; }} }}
 </style></head>
 <body><main>
@@ -421,6 +549,24 @@ footer {{ color:var(--text-muted); font-size:12px; margin-top:24px; }}
   <div class="teams">{team_html}</div>
   <p class="lead" style="margin-top:10px">Groups come from shirt colour and are not yet matched to team names. Referees and goalkeepers are excluded.</p>
 </section>
+
+<section>
+  <h2>Where the ball was</h2>
+  <p class="lead">Darker orange = the ball was seen there more often (camera view).</p>
+  {ball_img}
+  {half_html}
+</section>
+
+<div class="two">
+<section>
+  <h2>Ball time by pitch zone</h2>
+  {pitch_html}
+</section>
+<section>
+  <h2>Distance run</h2>
+  {dist_html}
+</section>
+</div>
 
 <section>
   <h2>Play over time</h2>
@@ -448,10 +594,17 @@ footer {{ color:var(--text-muted); font-size:12px; margin-top:24px; }}
 </section>
 </div>
 
+<div class="two">
+<section>
+  <h2>Match events</h2>
+  <p class="lead">Confirmed by a reviewer ({n_confirmed} so far). Events are labelled in the review app; the computer only proposes ball transfers.</p>
+  <table><tbody>{ev_html}</tbody></table>
+</section>
 <section>
   <h2>Player statistics</h2>
   {prof_html}
 </section>
+</div>
 
 <section>
   <h2>How much to trust this</h2>

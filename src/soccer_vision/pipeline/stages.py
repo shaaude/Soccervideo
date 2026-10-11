@@ -146,6 +146,9 @@ def stage_candidates(ctx: Context):
     p = CandidateParams(fps=float(ctx.manifest["normalized_fps"]), **ctx.config.get("candidates", {}))
     tracks = read_tracks(_prev(ctx, "detect_track", "tracks"))
     balls = read_balls(_prev(ctx, "detect_track", "balls"))
+    from ..events.ball import clean_balls
+    balls, ball_stats = clean_balls(balls[balls["confidence"] >= p.ball_threshold], p.fps,
+                                    ctx.manifest.get("pitch_roi_polygon"))
     contacts, events, suppressed = generate_with_audit(tracks, balls, ctx.match_id, p,
                                                        video_id=ctx.manifest["video_id"], run_id=ctx.run_id)
     outs = {"contact_candidates": ctx.path("contact_candidates.csv"),
@@ -155,9 +158,11 @@ def stage_candidates(ctx: Context):
     contacts.to_csv(outs["contact_candidates"], index=False)
     events.to_csv(outs["event_candidates"], index=False)
     suppressed.to_csv(outs["suppressed_candidates"], index=False)
-    outs["candidate_params"].write_text(json.dumps(params_dict(p), indent=2))
+    outs["candidate_params"].write_text(json.dumps({**params_dict(p), "ball_cleaning": ball_stats}, indent=2))
     return {"outputs": outs, "records": len(events),
             "notes": f"{len(events)} unverified transfer candidates; {len(suppressed)} suppressed with reasons; "
+                     f"{ball_stats['static_removed']} static and {ball_stats['outside_pitch_removed']} off-pitch ball "
+                     "detections removed; "
                      f"{len(contacts)} ball frames evaluated"}
 
 

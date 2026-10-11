@@ -119,3 +119,21 @@ offline, in light or dark mode, with:
 * "How much to trust this": the data-quality notes for this run
 
 After you review events, re-run `process` (or `report`) and the page updates.
+
+
+### Pitch maps, ball zones and distance run
+
+These need two things from you, once per camera position:
+
+1. **Pitch size.** Use the measured size if you know it. Otherwise an average 11v11 pitch is
+   105 × 68 m: put that in the landmark file and add `"pitch_size_assumed": true` to the match manifest
+   so the report says the size is assumed. Distances scale with the size, so a pitch that is really 100 m
+   long makes every distance about 5% too high.
+2. **Where the pitch is in the picture.** At least 14 marked points (corners, halfway line ends, centre
+   spot, penalty-box corners, goal-box corners, penalty spots) with `"model": "poly3"`. The size alone
+   cannot replace this: the software has to know which pixel is which spot on the grass.
+
+With both, the report adds a top-down pitch showing the share of ball time per zone, and distance run
+per player. Distances need confirmed identities (`tracklet_assignments.csv`); until then the report
+shows distance per tracker ID, which is pieces of runs rather than match totals. Steps that would mean
+running faster than 10 m/s (tracker mix-ups) are not counted.

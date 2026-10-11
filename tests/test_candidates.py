@@ -86,3 +86,16 @@ def test_load_inputs_rejects_foreign_match(tmp_path):
     balls.assign(match_id="other").to_csv(tmp_path / "b.csv", index=False)
     with pytest.raises(ValueError, match="different"):
         load_inputs(tmp_path / "t.csv", tmp_path / "b.csv", "m1")
+
+
+def test_static_and_off_pitch_ball_detections_are_removed():
+    import pandas as pd
+    from soccer_vision.events.ball import clean_balls
+    rows = [{"frame_index": f, "center_x": 3.0, "center_y": 437.0, "confidence": 0.2} for f in range(0, 300)]   # stuck object for 30 s
+    rows += [{"frame_index": f, "center_x": 100.0 + 5 * f, "center_y": 300.0, "confidence": 0.6} for f in range(100)]  # moving ball
+    rows += [{"frame_index": f, "center_x": 900.0 + 7 * f, "center_y": 20.0, "confidence": 0.5} for f in range(5)]    # in the sky
+    b = pd.DataFrame(rows)
+    roi = [[50, 200], [1500, 200], [1500, 600], [50, 600]]
+    kept, stats = clean_balls(b, fps=10, roi_polygon=roi)
+    assert stats == {"static_removed": 300, "outside_pitch_removed": 5}
+    assert len(kept) == 100 and kept["center_y"].eq(300).all()
