@@ -35,7 +35,7 @@ src/soccer_vision/
   evaluation/  per-class event, detection, identity and tracking metrics
   pipeline/    orchestrated, resumable runner with run hashes and manifests (Step 24)
   db/ api/     SQLAlchemy models, run importer, FastAPI service (Step 16)
-tests/                         50 tests (unit, pipeline, API on SQLite + PostgreSQL, migrations, Streamlit app)
+tests/                         52 tests (unit, pipeline, API on SQLite + PostgreSQL, migrations, Streamlit app)
 ```
 
 ## Set up
@@ -48,7 +48,7 @@ pip install -e ".[vision,db,api,review,eval,dev]"
 sudo apt install -y ffmpeg
 bash scripts/bootstrap_reference.sh      # Roboflow Sports at the pinned commit + demo weights (Google Drive)
 export SOCCER_DEVICE=cuda                # or cpu / mps
-python -m pytest                         # 50 tests; PostgreSQL tests need SOCCER_TEST_DATABASE_URL
+python -m pytest                         # 52 tests; PostgreSQL tests need SOCCER_TEST_DATABASE_URL
 ```
 
 Licensing: the Roboflow example models depend on Ultralytics (AGPL-3.0). Review before distributing.
@@ -98,7 +98,7 @@ no player in two tracklets at once).
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env && docker compose up -d db
 export SOCCER_DATABASE_URL=postgresql+psycopg://soccer:<password>@127.0.0.1:5432/soccervision
 alembic upgrade head
-soccer-vision db-import-run --run-dir data/processed/match001/<run_hash>
+soccer-vision db-import-run --run-dir data/processed/match001/<run_hash> --with-reviews
 SOCCER_API_KEYS="<key>:admin:alice,<key2>:reviewer:bob" SOCCER_MEDIA_SECRET=$(openssl rand -hex 32) \
   uvicorn soccer_vision.api.app:app --host 127.0.0.1
 ```

@@ -74,3 +74,65 @@ def import_run(engine, repo: Path, run_dir: Path) -> dict:
                             review_status="unreviewed", model_version=r.rule_version, original_prediction=pred))
                 counts["events_inserted"] += 1
     return counts
+
+
+def import_reviews(engine, annotations_dir: Path, match_id: str) -> dict:
+    """Apply the file-based pilot review store to the database (one-way, idempotent).
+
+    Only rows whose DB version is older than the file version are applied. Roster actors must already
+    have a player_appearance in the match; otherwise the row is skipped and reported, never guessed.
+    Each applied change writes an event_reviews record carrying the file audit's reviewer.
+    """
+    from ..review.store import ReviewStore
+    from ..schemas import UNKNOWN_PLAYER
+    from .models import EventReview, PlayerAppearance
+
+    store = ReviewStore(Path(annotations_dir), match_id)
+    df = store.load()
+    out = {"applied": 0, "added": 0, "unchanged": 0, "skipped": []}
+
+    def appearance(s, pid):
+        if not pid:
+            return None, False, None
+        if pid.upper() == UNKNOWN_PLAYER:
+            return None, True, None
+        a = s.scalar(select(PlayerAppearance).where(PlayerAppearance.match_id == match_id,
+                                                    PlayerAppearance.player_id == pid))
+        return (a.appearance_id, False, None) if a else (None, False, f"no appearance for player {pid}")
+
+    with Session(engine) as s, s.begin():
+        for r in df.itertuples(index=False):
+            version = int(r.version)
+            e = s.get(Event, r.event_id)
+            if e is None and r.source == "reviewer_added":
+                vid = s.scalar(select(MatchVideo.video_id).where(MatchVideo.match_id == match_id))
+                e = Event(event_id=r.event_id, match_id=match_id, video_id=vid, source="reviewer_added",
+                          video_time_seconds=float(r.video_time_s), event_type=r.event_type, outcome=r.outcome,
+                          review_status="unreviewed", version=0, original_prediction={})
+                s.add(e)
+                out["added"] += 1
+            if e is None:
+                out["skipped"].append(f"{r.event_id}: not in database (import its run first)")
+                continue
+            if e.version >= version:
+                out["unchanged"] += 1
+                continue
+            actor_id, unknown, err = appearance(s, r.actor_player_id)
+            recv_id, _, err2 = appearance(s, r.receiver_player_id)
+            if err or err2:
+                out["skipped"].append(f"{r.event_id}: {err or err2}")
+                continue
+            before = {"event_type": e.event_type, "outcome": e.outcome, "review_status": e.review_status,
+                      "video_time_seconds": e.video_time_seconds}
+            e.event_type, e.outcome, e.review_status = r.event_type, r.outcome, r.review_status
+            e.video_time_seconds = float(r.video_time_s)
+            e.match_clock_seconds = float(r.match_clock_s) if r.match_clock_s else None
+            e.actor_appearance_id, e.actor_unknown, e.receiver_appearance_id = actor_id, unknown, recv_id
+            e.version = version
+            s.add(EventReview(event_id=e.event_id, reviewer_id=r.reviewer_id or "unknown",
+                              previous_values=before,
+                              corrected_values={"event_type": r.event_type, "outcome": r.outcome,
+                                                "review_status": r.review_status, "actor_player_id": r.actor_player_id,
+                                                "source": "file_review_store", "notes": r.review_notes}))
+            out["applied"] += 1
+    return out

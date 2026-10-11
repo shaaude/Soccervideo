@@ -162,10 +162,15 @@ def cmd_process(a):
 
 
 def cmd_db_import(a):
-    from .db.importer import import_run
+    from .db.importer import import_reviews, import_run
     from .db.session import make_engine
-    n = import_run(make_engine(), _repo(), Path(a.run_dir))
+    eng = make_engine()
+    n = import_run(eng, _repo(), Path(a.run_dir))
     print(json.dumps(n, indent=2))
+    if a.with_reviews:
+        state = json.loads((Path(a.run_dir) / "manifest.json").read_text())
+        mid = state["match_id"]
+        print(json.dumps(import_reviews(eng, _repo() / "data" / "annotations" / mid, mid), indent=2))
 
 
 def build_parser():
@@ -238,6 +243,7 @@ def build_parser():
 
     s = sub.add_parser("db-import-run", help="Load a processing run's metadata and candidates into the database")
     s.add_argument("--run-dir", required=True)
+    s.add_argument("--with-reviews", action="store_true", help="also apply the file-based review store")
     s.set_defaults(fn=cmd_db_import)
     return p
 
