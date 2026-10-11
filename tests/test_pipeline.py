@@ -67,7 +67,9 @@ def test_pipeline_end_to_end_resume_and_review_gate(repo):
     s = statuses(st)
     assert s == {"validate": "SUCCEEDED", "detect_track": "SUCCEEDED", "calibrate": "SKIPPED", "identify": "SUCCEEDED",
                  "candidates": "SUCCEEDED", "temporal_model": "SKIPPED", "highlights": "SUCCEEDED",
-                 "review_queue": "SUCCEEDED", "aggregate": "SKIPPED"}
+                 "review_queue": "SUCCEEDED", "aggregate": "SKIPPED", "report": "SUCCEEDED"}
+    report = (r / "data/processed/t1" / st["run_id"] / "report.html").read_text()
+    assert "Possible passes" in report and "No player statistics yet" in report and "unreviewed" in report
     assert "explicitly MISSING" in st["stages"]["calibrate"]["reason"]
     run_dir = r / "data/processed/t1" / st["run_id"]
     ev = pd.read_csv(run_dir / "event_candidates.csv")
@@ -91,6 +93,7 @@ def test_pipeline_end_to_end_resume_and_review_gate(repo):
                                              "actor_player_id": "p7"}, "rev", 0)
     st3 = process(r, "t1", "data/normalized/t1.mp4", r / "config/pipeline.yaml")
     assert statuses(st3)["aggregate"] == "SUCCEEDED" and calls["n"] == n
+    assert "p7" in (run_dir / "report.html").read_text()      # report refreshed with confirmed stats
     prof = pd.read_csv(run_dir / "player_profiles.csv", dtype={"player_id": str})
     assert prof.player_id.tolist() == ["p7"] and prof.completed_passes.tolist() == [1]
 

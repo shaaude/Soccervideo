@@ -248,6 +248,24 @@ def cmd_landmark_frame(a):
     print(landmark_frame(Path(a.video), a.time, Path(a.out), a.grid))
 
 
+def cmd_report(a):
+    from .report import build_report
+    repo = _repo()
+    if a.run_dir:
+        run = Path(a.run_dir)
+    else:
+        runs = sorted((repo / "data" / "processed" / a.match_id).glob("*/manifest.json"), key=lambda p: p.stat().st_mtime)
+        if not runs:
+            print(f"ERROR: no processing runs for {a.match_id}", file=sys.stderr)
+            return 2
+        run = runs[-1].parent
+    out = build_report(repo, run)
+    print(f"Report: {out}")
+    if a.open:
+        import webbrowser
+        webbrowser.open(out.resolve().as_uri())
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="soccer-vision", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -364,6 +382,11 @@ def build_parser():
     s.add_argument("--video", required=True); s.add_argument("--time", type=float, required=True)
     s.add_argument("--out", required=True); s.add_argument("--grid", type=int, default=100)
     s.set_defaults(fn=cmd_landmark_frame)
+
+    s = sub.add_parser("report", help="Build the visual match report (report.html) for a run and open it")
+    s.add_argument("--match-id"); s.add_argument("--run-dir", help="default: the match's most recent run")
+    s.add_argument("--open", action="store_true", help="open it in your web browser")
+    s.set_defaults(fn=cmd_report)
 
     s = sub.add_parser("db-import-run", help="Load a processing run's metadata and candidates into the database")
     s.add_argument("--run-dir", required=True)

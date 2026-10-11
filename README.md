@@ -60,7 +60,8 @@ soccer-vision veo --match-id <match> --permission granted --process \
   --panorama "https://c.veocdn.com/<recording>/panorama/transcode-<id>.mp4" \
   --standard "https://c.veocdn.com/<recording>/standard/machine/<id>/video.mp4"
 ```
-The panorama is analysed and the follow-cam is used for review clips. See [`docs/VEO.md`](docs/VEO.md)
+The panorama is analysed and the follow-cam is used for review clips. Results: `soccer-vision report --match-id <match> --open` opens the visual match report.
+See [`docs/VEO.md`](docs/VEO.md)
 for the offset check, panorama calibration, and GPU needs.
 
 ## Process a match from a local file

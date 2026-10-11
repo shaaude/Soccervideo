@@ -103,3 +103,19 @@ pitch outline once and add it to the match manifest as `"pitch_roi_polygon": [[x
 coordinates in the normalized video; use `soccer-vision landmark-frame` to read them). People whose feet
 are outside the outline are dropped before tracking; the count is recorded in `detection_meta.json`.
 Ball candidates are not filtered (a ball in the air can be outside the outline).
+
+
+## The match report
+
+Every `process` run ends by writing a visual report to `data/processed/<match>/<run>/report.html`.
+Open it with `soccer-vision report --match-id <match> --open`. It is one self-contained page that works
+offline, in light or dark mode, with:
+
+* headline numbers (time analysed, people on the pitch, how often the ball was seen, possible passes)
+* where the players were, overall and for each shirt-colour group, drawn over the panorama
+* play over time, with ball visibility and the possible passes (hover for details)
+* the list of possible passes with links to their clips and review status
+* player statistics, only from events a person has confirmed
+* "How much to trust this": the data-quality notes for this run
+
+After you review events, re-run `process` (or `report`) and the page updates.

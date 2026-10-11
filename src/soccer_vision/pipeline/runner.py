@@ -25,11 +25,12 @@ from ..manifest import load_manifest
 from ..provenance import canonical_json, code_revision, sha256_file, sha256_text
 
 STAGES = ["validate", "detect_track", "calibrate", "identify", "candidates", "temporal_model",
-          "highlights", "review_queue", "aggregate"]
+          "highlights", "review_queue", "aggregate", "report"]
 # Job states exposed by the API (Step 16) for each stage.
 JOB_STATE_FOR_STAGE = {"validate": "ingesting", "detect_track": "detecting", "calibrate": "calibrating",
                        "identify": "identifying", "candidates": "spotting", "temporal_model": "spotting",
-                       "highlights": "spotting", "review_queue": "review", "aggregate": "aggregation"}
+                       "highlights": "spotting", "review_queue": "review", "aggregate": "aggregation",
+                       "report": "aggregation"}
 
 
 class StageSkipped(Exception):
@@ -142,7 +143,7 @@ class Pipeline:
         funcs = {s: getattr(S, f"stage_{s}") for s in STAGES}
         for name in STAGES:
             inputs = self._checksums(S.stage_inputs(name, self.ctx))
-            rec = self.state["stages"][name]
+            rec = self.state["stages"].setdefault(name, {"status": "PENDING"})
             if not force and self._reusable(name, inputs):
                 self.ctx.outputs[name] = {k: self.repo / v["path"] for k, v in rec["outputs"].items()}
                 rec["reused_at"] = datetime.now(timezone.utc).isoformat()

@@ -29,6 +29,8 @@ def stage_inputs(name: str, ctx: Context) -> dict:
         "highlights": {"events": _prev(ctx, "candidates", "event_candidates")},
         "review_queue": {"events": _prev(ctx, "candidates", "event_candidates")},
         "aggregate": {"reviewed": ctx.annotations_dir / "reviewed_events.csv"},
+        "report": {"reviewed": ctx.annotations_dir / "reviewed_events.csv",
+                   "events": _prev(ctx, "candidates", "event_candidates")},
     }[name]
     lm = ctx.manifest.get("calibration_landmarks")
     if name == "calibrate" and lm:
@@ -221,3 +223,9 @@ def stage_aggregate(ctx: Context):
     return {"outputs": {"player_profiles": pp, "coverage_report": rpj}, "records": len(profiles),
             "notes": f"{report['attributed_to_players']} attributed confirmed events; "
                      f"{report['excluded_not_confirmed']} excluded as not confirmed"}
+
+
+def stage_report(ctx: Context):
+    from ..report import build_report
+    out = build_report(ctx.repo, ctx.run_dir)
+    return {"outputs": {"report": out}, "records": 1, "notes": f"open {ctx.rel(out)} in a web browser"}
